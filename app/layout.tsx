@@ -2,14 +2,14 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Data Entry',
-  description: 'Manage and export your records',
+  title: 'Neuro Spine Rehab Center',
+  description: 'Clinic Management System',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-slate-50 text-gray-900 antialiased">{children}</body>
+      <body className="bg-slate-50 text-slate-900 antialiased min-h-screen">{children}</body>
     </html>
   )
 }

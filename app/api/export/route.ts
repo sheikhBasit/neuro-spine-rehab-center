@@ -1,33 +1,48 @@
-import { neon } from '@neondatabase/serverless'
+import { sql } from '@/lib/db'
+import { requireRole } from '@/lib/auth'
 import * as XLSX from 'xlsx'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const sql = neon(process.env.DATABASE_URL!)
-  const rows = await sql`SELECT name, phone, address, date FROM records ORDER BY created_at DESC`
+  try {
+    await requireRole(['admin', 'data_entry'])
+    const rows = await sql`
+      SELECT
+        p.queue_number AS "Queue #",
+        CASE WHEN p.is_emergency THEN 'YES' ELSE 'NO' END AS "Emergency",
+        p.name AS "Patient Name",
+        p.age AS "Age",
+        p.guardian_name AS "Father/Husband",
+        p.cnic_bform AS "CNIC / B-Form",
+        p.phone AS "Phone",
+        p.address AS "Address",
+        p.status AS "Status",
+        u.name AS "Seen By Doctor",
+        TO_CHAR(p.check_in_at AT TIME ZONE 'Asia/Karachi', 'YYYY-MM-DD HH24:MI') AS "Check-in Time",
+        TO_CHAR(p.seen_at AT TIME ZONE 'Asia/Karachi', 'YYYY-MM-DD HH24:MI') AS "Seen At"
+      FROM patients p
+      LEFT JOIN users u ON p.seen_by_doctor_id = u.id
+      ORDER BY p.is_emergency DESC, p.check_in_at ASC
+    `
 
-  const data = rows.map(r => ({
-    Name: r.name,
-    'Phone Number': r.phone,
-    Address: r.address,
-    Date: new Date(r.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-  }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [4,10,20,5,20,16,14,30,12,20,18,18].map(wch => ({ wch }))
 
-  const ws = XLSX.utils.json_to_sheet(data)
-  ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 40 }, { wch: 20 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Patients')
 
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Records')
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    const filename = `patients-${new Date().toISOString().split('T')[0]}.xlsx`
 
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-  const filename = `records-${new Date().toISOString().split('T')[0]}.xlsx`
-
-  return new Response(buf, {
-    headers: {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    },
-  })
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+    })
+  } catch {
+    return new Response('Unauthorized', { status: 401 })
+  }
 }
