@@ -1,11 +1,11 @@
 import { neon } from '@neondatabase/serverless'
 import * as XLSX from 'xlsx'
 
-const sql = neon(process.env.DATABASE_URL!)
-
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const sql = neon(process.env.DATABASE_URL!)
   const rows = await sql`SELECT name, phone, address, date FROM records ORDER BY created_at DESC`
 
   const data = rows.map(r => ({
