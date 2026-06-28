@@ -77,6 +77,20 @@ export async function GET(req: Request) {
     `
     log.push('✓ prescriptions table')
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS attendance (
+        id SERIAL PRIMARY KEY,
+        doctor_id INT NOT NULL REFERENCES users(id),
+        date DATE NOT NULL DEFAULT CURRENT_DATE,
+        shift_start TIMESTAMPTZ,
+        shift_end TIMESTAMPTZ,
+        breaks JSONB DEFAULT '[]'::jsonb,
+        total_minutes INT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+    log.push('✓ attendance table')
+
     const adminEmail = 'admin@admin.com'
     const adminPassword = 'admin123'
     const [existing] = await sql`SELECT id FROM users WHERE email = ${adminEmail} LIMIT 1`

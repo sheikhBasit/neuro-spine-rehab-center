@@ -13,6 +13,7 @@ interface ReportData {
   perDoctor: { doctor_name: string; count: number }[]
   statusBreakdown: { status: string; count: number }[]
 }
+interface AttendanceRecord { id: number; doctor_name: string; speciality: string; shift_start: string; shift_end: string | null; total_minutes: number | null; breaks: { start: string; end: string | null }[] }
 
 const blankDoctor = { role: 'doctor', name: '', email: '', password: '', phone: '', cnic: '', license_no: '', speciality: '', qualification: '' }
 const blankStaff  = { role: 'data_entry', name: '', email: '', password: '', phone: '' }
@@ -26,8 +27,9 @@ const roleLabel: Record<string, string> = { admin: 'Admin', doctor: 'Doctor', da
 
 export default function AdminPanel() {
   const router = useRouter()
-  const [tab, setTab] = useState<'users' | 'reports'>('users')
+  const [tab, setTab] = useState<'dashboard' | 'users' | 'reports'>('dashboard')
   const [users, setUsers] = useState<User[]>([])
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [reports, setReports] = useState<ReportData | null>(null)
   const [showModal, setShowModal] = useState<'doctor' | 'staff' | null>(null)
   const [form, setForm] = useState<Record<string, string>>(blankDoctor)
@@ -56,21 +58,27 @@ export default function AdminPanel() {
     }
   }, [])
 
+  const loadAttendance = useCallback(async () => {
+    const r = await fetch('/api/attendance')
+    if (r.ok) setAttendance(await r.json())
+  }, [])
+
   useEffect(() => {
     const cachedUsers = localStorage.getItem('cache_admin_users')
     if (cachedUsers) setUsers(JSON.parse(cachedUsers))
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => d && setAdminName(d.name))
     loadUsers()
-  }, [loadUsers])
+    loadReports()
+    loadAttendance()
+  }, [loadUsers, loadReports, loadAttendance])
 
   useEffect(() => {
     if (tab === 'reports') {
       const cachedReports = localStorage.getItem('cache_admin_reports')
       if (cachedReports) setReports(JSON.parse(cachedReports))
+      loadReports()
     }
-  }, [])
-
-  useEffect(() => { if (tab === 'reports') loadReports() }, [tab, loadReports])
+  }, [tab, loadReports])
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
@@ -133,13 +141,120 @@ export default function AdminPanel() {
       <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
         {/* Tabs */}
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit mb-6 shadow-sm">
-          {(['users', 'reports'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-6 py-2 text-sm font-semibold rounded-lg transition ${tab === t ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
-              {t === 'users' ? '👥 Users' : '📊 Reports'}
+          {([
+            { key: 'dashboard', label: '🏠 Dashboard' },
+            { key: 'users',     label: '👥 Users' },
+            { key: 'reports',   label: '📊 Reports' },
+          ] as const).map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`px-6 py-2 text-sm font-semibold rounded-lg transition ${tab === t.key ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
+              {t.label}
             </button>
           ))}
         </div>
+
+        {/* Dashboard tab */}
+        {tab === 'dashboard' && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            {/* Today stats */}
+            <div>
+              <h2 className="text-base font-bold text-slate-500 uppercase tracking-wider mb-3">Today at a Glance</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {stats.map((s, i) => (
+                  <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
+                    className="card p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{s.label}</p>
+                      <span className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center text-base`}>{s.icon}</span>
+                    </div>
+                    <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Doctor Attendance */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-bold text-slate-500 uppercase tracking-wider">Doctor Attendance — Today</h2>
+                <button onClick={loadAttendance} className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition">Refresh</button>
+              </div>
+              {attendance.length === 0 ? (
+                <div className="card p-8 text-center text-slate-400 text-sm">No doctors have started a shift today</div>
+              ) : (
+                <div className="card overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        {['Doctor', 'Speciality', 'Shift Start', 'Shift End', 'Duration', 'Breaks', 'Status'].map(h => (
+                          <th key={h} className="px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attendance.map((a, i) => {
+                        const isActive = !a.shift_end
+                        const breakCount = a.breaks?.length ?? 0
+                        const onBreak = breakCount > 0 && !a.breaks[breakCount - 1]?.end
+                        return (
+                          <motion.tr key={a.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }}
+                            className="border-t border-slate-100 hover:bg-indigo-50/20 transition">
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-sky-400 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                  {a.doctor_name.charAt(0)}
+                                </div>
+                                <span className="font-semibold text-slate-800">{a.doctor_name}</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-500 text-xs">{a.speciality || '—'}</td>
+                            <td className="px-5 py-3.5 text-slate-700 font-medium">
+                              {new Date(a.shift_start).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-500">
+                              {a.shift_end ? new Date(a.shift_end).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </td>
+                            <td className="px-5 py-3.5 font-semibold text-indigo-700">
+                              {a.total_minutes != null ? `${Math.floor(a.total_minutes / 60)}h ${a.total_minutes % 60}m` : isActive ? 'Ongoing' : '—'}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-500">{breakCount > 0 ? `${breakCount} break${breakCount > 1 ? 's' : ''}` : '—'}</td>
+                            <td className="px-5 py-3.5">
+                              {onBreak
+                                ? <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">On Break</span>
+                                : isActive
+                                  ? <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200 w-fit">
+                                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />Active
+                                    </span>
+                                  : <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">Done</span>
+                              }
+                            </td>
+                          </motion.tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Quick links */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { label: 'Manage Users', desc: 'Add doctors and staff accounts', icon: '👥', action: () => setTab('users'), color: 'from-indigo-500 to-indigo-600' },
+                { label: 'View Reports', desc: 'Charts and statistics', icon: '📊', action: () => setTab('reports'), color: 'from-sky-500 to-sky-600' },
+                { label: 'Export Excel', desc: 'Download today\'s patient data', icon: '↓', action: () => window.open('/api/export'), color: 'from-emerald-500 to-emerald-600' },
+              ].map(c => (
+                <button key={c.label} onClick={c.action}
+                  className={`bg-gradient-to-br ${c.color} text-white rounded-2xl p-5 text-left hover:shadow-lg transition-all hover:-translate-y-0.5 shadow-md`}
+                  style={{ transition: 'transform 0.15s, box-shadow 0.15s' }}>
+                  <span className="text-2xl block mb-2">{c.icon}</span>
+                  <p className="font-bold text-base">{c.label}</p>
+                  <p className="text-white/70 text-xs mt-0.5">{c.desc}</p>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Users tab */}
         {tab === 'users' && (

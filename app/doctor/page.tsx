@@ -44,7 +44,7 @@ function fmtElapsed(secs: number) {
   return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
-type ShiftState = { status: 'idle' } | { status: 'active'; startedAt: number } | { status: 'break'; startedAt: number; breakAt: number }
+type ShiftState = { status: 'idle' } | { status: 'active'; startedAt: number; attendanceId: number } | { status: 'break'; startedAt: number; attendanceId: number; breakAt: number }
 
 export default function DoctorPanel() {
   const router = useRouter()
@@ -78,10 +78,41 @@ export default function DoctorPanel() {
   }, [shift])
 
   const saveShift = (s: ShiftState) => { setShift(s); localStorage.setItem('doctor_shift', JSON.stringify(s)) }
-  const startShift = () => { const s: ShiftState = { status: 'active', startedAt: Date.now() }; saveShift(s); setElapsed(0); notify('Shift started') }
-  const takeBreak  = () => { if (shift.status !== 'active') return; saveShift({ status: 'break', startedAt: shift.startedAt, breakAt: Date.now() }); notify('On break') }
-  const resumeShift = () => { if (shift.status !== 'break') return; saveShift({ status: 'active', startedAt: shift.startedAt }); notify('Shift resumed') }
-  const endShift = () => { saveShift({ status: 'idle' }); setElapsed(0); notify('Shift ended') }
+
+  const startShift = async () => {
+    const r = await fetch('/api/attendance', { method: 'POST' })
+    const rec = await r.json()
+    const s: ShiftState = { status: 'active', startedAt: Date.now(), attendanceId: rec.id }
+    saveShift(s); setElapsed(0); notify('Shift started ✓')
+  }
+
+  const takeBreak = async () => {
+    if (shift.status !== 'active') return
+    await fetch(`/api/attendance/${shift.attendanceId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'break_start' })
+    })
+    saveShift({ status: 'break', startedAt: shift.startedAt, attendanceId: shift.attendanceId, breakAt: Date.now() })
+    notify('On break')
+  }
+
+  const resumeShift = async () => {
+    if (shift.status !== 'break') return
+    await fetch(`/api/attendance/${shift.attendanceId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'break_end' })
+    })
+    saveShift({ status: 'active', startedAt: shift.startedAt, attendanceId: shift.attendanceId })
+    notify('Shift resumed')
+  }
+
+  const endShift = async () => {
+    const id = shift.status !== 'idle' ? (shift as { attendanceId: number }).attendanceId : null
+    if (id) {
+      await fetch(`/api/attendance/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'shift_end' })
+      })
+    }
+    saveShift({ status: 'idle' }); setElapsed(0); notify('Shift ended')
+  }
 
   const loadQueue = useCallback(async () => {
     const r = await fetch('/api/patients')
