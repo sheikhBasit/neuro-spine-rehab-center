@@ -26,3 +26,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 }
+
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  try {
+    await requireRole(['admin', 'data_entry'])
+    const id = parseInt(params.id)
+    await sql`DELETE FROM patients WHERE id = ${id}`
+    return NextResponse.json({ ok: true })
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+}

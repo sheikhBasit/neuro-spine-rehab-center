@@ -55,6 +55,7 @@ export default function EntryPanel() {
   const [cnicError, setCnicError] = useState('')
   const [phoneError, setPhoneError] = useState('')
   const [queueDate, setQueueDate] = useState(new Date().toISOString().slice(0, 10))
+  const queueDateRef = useRef(new Date().toISOString().slice(0, 10))
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
@@ -81,7 +82,7 @@ export default function EntryPanel() {
   }
 
   const loadQueue = useCallback(async (date?: string) => {
-    const d = date ?? queueDate
+    const d = date ?? queueDateRef.current
     const r = await fetch(`/api/patients?date=${d}`)
     if (r.status === 401) { router.push('/login'); return }
     if (r.ok) {
@@ -90,7 +91,7 @@ export default function EntryPanel() {
       if (d === new Date().toISOString().slice(0, 10))
         localStorage.setItem('cache_entry_queue', JSON.stringify(data))
     }
-  }, [router, queueDate])
+  }, [router])
 
   useEffect(() => {
     const cached = localStorage.getItem('cache_entry_queue')
@@ -137,11 +138,16 @@ export default function EntryPanel() {
 
     notify(`Patient #${String(data.queue_number).padStart(3, '0')} registered${docWarn ? ' (⚠ ' + docWarn + ')' : ''}`)
     // Keep check_in_at pinned to selected date so batch entry stays on same date
-    const keepDate = queueDate
+    const keepDate = queueDateRef.current
     setForm({ ...blank, check_in_at: isToday ? '' : `${keepDate}T09:00` })
     setFiles([]); setFileKey(k => k + 1); setPhoneError(''); setCnicError('')
     await loadQueue(keepDate)
     setSubmitting(false)
+  }
+
+  const deletePatient = async (id: number) => {
+    await fetch(`/api/patients/${id}`, { method: 'DELETE' })
+    await loadQueue()
   }
 
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
@@ -151,9 +157,10 @@ export default function EntryPanel() {
 
   // When the date changes, sync form.check_in_at so new registrations land on that date
   const changeDate = (date: string) => {
+    queueDateRef.current = date
     setQueueDate(date)
     if (date === todayISO) {
-      setForm(f => ({ ...f, check_in_at: '' }))  // blank = use server NOW()
+      setForm(f => ({ ...f, check_in_at: '' }))
     } else {
       setForm(f => ({ ...f, check_in_at: `${date}T09:00` }))
     }
@@ -480,10 +487,10 @@ export default function EntryPanel() {
                 <div className="text-center py-10 text-slate-400 text-sm">No patients for this date</div>
               ) : (
                 <>
-                  {patients.filter(p => p.is_emergency).map((p, i) => <QCard key={p.id} p={p} i={i} />)}
-                  {patients.filter(p => !p.is_emergency && p.status === 'waiting').map((p, i) => <QCard key={p.id} p={p} i={i} />)}
-                  {patients.filter(p => !p.is_emergency && p.status === 'in_progress').map((p, i) => <QCard key={p.id} p={p} i={i} />)}
-                  {patients.filter(p => p.status === 'done').map((p, i) => <QCard key={p.id} p={p} i={i} dim />)}
+                  {patients.filter(p => p.is_emergency).map((p, i) => <QCard key={p.id} p={p} i={i} onDelete={deletePatient} />)}
+                  {patients.filter(p => !p.is_emergency && p.status === 'waiting').map((p, i) => <QCard key={p.id} p={p} i={i} onDelete={deletePatient} />)}
+                  {patients.filter(p => !p.is_emergency && p.status === 'in_progress').map((p, i) => <QCard key={p.id} p={p} i={i} onDelete={deletePatient} />)}
+                  {patients.filter(p => p.status === 'done').map((p, i) => <QCard key={p.id} p={p} i={i} dim onDelete={deletePatient} />)}
                 </>
               )}
             </div>
@@ -504,21 +511,24 @@ export default function EntryPanel() {
   )
 }
 
-function QCard({ p, i, dim }: { p: Patient; i: number; dim?: boolean }) {
+function QCard({ p, i, dim, onDelete }: { p: Patient; i: number; dim?: boolean; onDelete?: (id: number) => void }) {
   const s = STATUS_STYLE[p.status] || STATUS_STYLE.waiting
   const payColor = p.payment_status === 'paid' ? 'text-emerald-600' : p.payment_status === 'partial' ? 'text-amber-600' : 'text-slate-400'
+  const dt = new Date(p.check_in_at)
+  const timeStr = dt.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
+  const dateStr = dt.toLocaleDateString('en-PK', { day: '2-digit', month: 'short' })
   return (
     <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: dim ? 0.45 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
-      className={`rounded-xl border px-4 py-3 bg-white transition ${p.is_emergency ? 'border-red-300 bg-red-50' : `border-slate-200 ${s.bg}`}`}>
+      className={`rounded-xl border px-4 py-3 bg-white transition group ${p.is_emergency ? 'border-red-300 bg-red-50' : `border-slate-200 ${s.bg}`}`}>
       <div className="flex items-center gap-3">
         <span className={`text-xl font-black tabular-nums w-12 shrink-0 ${p.is_emergency ? 'text-red-600' : 'text-slate-600'}`}>
           #{String(p.queue_number).padStart(3, '0')}
         </span>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-slate-800 text-sm truncate">{p.name}</p>
-          <p className="text-xs text-slate-500">{p.age} yrs · {new Date(p.check_in_at).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })}</p>
+          <p className="text-xs text-slate-500">{p.age} yrs · {dateStr} · {timeStr}</p>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
           <span className={`flex items-center gap-1 text-xs font-bold ${p.is_emergency ? 'text-red-600' : s.text}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${p.is_emergency ? 'bg-red-500' : s.dot}`} />
             {p.is_emergency ? 'EMRG' : p.status === 'in_progress' ? 'Active' : p.status}
@@ -527,6 +537,12 @@ function QCard({ p, i, dim }: { p: Patient; i: number; dim?: boolean }) {
             <span className={`text-xs font-semibold ${payColor}`}>
               PKR {Number(p.bill_amount).toLocaleString()}
             </span>
+          )}
+          {onDelete && (
+            <button onClick={() => { if (confirm(`Delete ${p.name} from queue?`)) onDelete(p.id) }}
+              className="text-xs text-slate-300 hover:text-red-500 transition opacity-0 group-hover:opacity-100 leading-none mt-0.5">
+              ✕ delete
+            </button>
           )}
         </div>
       </div>
