@@ -9,6 +9,10 @@ export const runtime = 'nodejs'
 // ponytail: Vercel Hobby has a 4.5MB request body limit; sufficient for clinic docs
 export async function POST(req: Request) {
   try {
+    if (!process.env.CLOUDINARY_API_SECRET) {
+      return NextResponse.json({ error: 'Document upload not configured — add Cloudinary credentials' }, { status: 503 })
+    }
+
     await requireRole(['data_entry', 'doctor', 'admin'])
     const formData = await req.formData()
     const file = formData.get('file') as File | null

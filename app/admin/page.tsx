@@ -4,7 +4,6 @@ import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 
-// SSR-safe recharts
 const Charts = dynamic(() => import('./Charts'), { ssr: false })
 
 interface User { id: number; role: string; name: string; email: string; phone: string; cnic: string; license_no: string; speciality: string; qualification: string; active: boolean; created_at: string }
@@ -17,6 +16,13 @@ interface ReportData {
 
 const blankDoctor = { role: 'doctor', name: '', email: '', password: '', phone: '', cnic: '', license_no: '', speciality: '', qualification: '' }
 const blankStaff  = { role: 'data_entry', name: '', email: '', password: '', phone: '' }
+
+const roleColor: Record<string, string> = {
+  admin:      'bg-violet-100 text-violet-700 border-violet-200',
+  doctor:     'bg-sky-100 text-sky-700 border-sky-200',
+  data_entry: 'bg-slate-100 text-slate-600 border-slate-200',
+}
+const roleLabel: Record<string, string> = { admin: 'Admin', doctor: 'Doctor', data_entry: 'Data Entry' }
 
 export default function AdminPanel() {
   const router = useRouter()
@@ -65,7 +71,7 @@ export default function AdminPanel() {
     })
     const data = await r.json()
     if (!r.ok) { notify(data.error || 'Failed to create user'); setSaving(false); return }
-    notify(`${form.role === 'doctor' ? 'Doctor' : 'Staff'} account created`)
+    notify(`${form.role === 'doctor' ? 'Doctor' : 'Staff'} account created ✓`)
     setShowModal(null)
     await loadUsers()
     setSaving(false)
@@ -81,31 +87,38 @@ export default function AdminPanel() {
 
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
 
-  const roleLabel: Record<string, string> = { admin: 'Admin', doctor: 'Doctor', data_entry: 'Data Entry' }
+  const stats = [
+    { label: 'Total Today',    value: reports?.stats.total_today ?? '—',     color: 'text-indigo-600', bg: 'bg-indigo-50', icon: '👥' },
+    { label: 'Completed',      value: reports?.stats.done_today ?? '—',       color: 'text-emerald-600', bg: 'bg-emerald-50', icon: '✓' },
+    { label: 'Emergencies',    value: reports?.stats.emergency_today ?? '—',  color: 'text-red-600', bg: 'bg-red-50', icon: '🚨' },
+    { label: 'Avg Wait (min)', value: reports?.stats.avg_wait_minutes ?? '—', color: 'text-amber-600', bg: 'bg-amber-50', icon: '⏱' },
+  ]
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-indigo-50/20 to-slate-50">
       {/* Navbar */}
-      <nav className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between sticky top-0 z-30 shadow-md">
+      <nav className="bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-white px-6 py-3.5 flex items-center justify-between sticky top-0 z-30 shadow-lg border-b border-indigo-800/30">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center text-xs font-bold">NS</div>
+          <div className="w-9 h-9 bg-gradient-to-br from-indigo-400 to-sky-400 rounded-xl flex items-center justify-center text-sm font-bold shadow-md">NS</div>
           <div>
-            <p className="font-semibold text-sm leading-tight">Neuro Spine Rehab Center</p>
-            <p className="text-slate-400 text-xs">Administration Panel</p>
+            <p className="font-bold text-sm leading-tight">Neuro Spine Rehab Center</p>
+            <p className="text-indigo-300 text-xs">Administration Panel</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs bg-slate-700 px-2.5 py-1 rounded-full">Admin · {adminName}</span>
-          <button onClick={logout} className="text-xs text-slate-400 hover:text-white transition">Sign Out</button>
+          <span className="text-xs bg-indigo-800/60 border border-indigo-700/40 px-3 py-1.5 rounded-full font-medium">
+            Admin · {adminName}
+          </span>
+          <button onClick={logout} className="text-xs text-indigo-300 hover:text-white transition font-medium">Sign Out</button>
         </div>
       </nav>
 
       <div className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
         {/* Tabs */}
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit mb-6">
+        <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit mb-6 shadow-sm">
           {(['users', 'reports'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-5 py-2 text-sm font-medium rounded-lg transition ${tab === t ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`px-6 py-2 text-sm font-semibold rounded-lg transition ${tab === t ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
               {t === 'users' ? '👥 Users' : '📊 Reports'}
             </button>
           ))}
@@ -115,57 +128,70 @@ export default function AdminPanel() {
         {tab === 'users' && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-800">User Management</h2>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800">User Management</h2>
+                <p className="text-xs text-slate-500 mt-0.5">{users.length} accounts</p>
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => openModal('doctor')}
-                  className="bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                  className="btn-primary px-5 py-2.5 text-sm">
                   + Add Doctor
                 </button>
                 <button onClick={() => openModal('staff')}
-                  className="bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                  className="btn-secondary px-5 py-2.5 text-sm">
                   + Add Staff
                 </button>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-left border-b border-slate-200">
+                    <tr className="bg-slate-50/80 text-left border-b border-slate-200">
                       {['Name', 'Role', 'Email', 'Phone', 'Speciality', 'Status', 'Actions'].map(h => (
-                        <th key={h} className="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        <th key={h} className="px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map(u => (
-                      <tr key={u.id} className="border-t border-slate-50 hover:bg-slate-50 transition">
-                        <td className="px-5 py-3.5 font-medium text-slate-800">{u.name}</td>
-                        <td className="px-5 py-3.5">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                            u.role === 'doctor' ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {users.map((u, i) => (
+                      <motion.tr key={u.id}
+                        initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        className="border-t border-slate-100 hover:bg-indigo-50/30 transition">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-sky-400 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">
+                              {u.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-semibold text-slate-800">{u.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${roleColor[u.role]}`}>
                             {roleLabel[u.role]}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-slate-600">{u.email}</td>
-                        <td className="px-5 py-3.5 text-slate-500">{u.phone || '—'}</td>
-                        <td className="px-5 py-3.5 text-slate-500">{u.speciality || '—'}</td>
-                        <td className="px-5 py-3.5">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.active ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                        <td className="px-5 py-4 text-slate-600">{u.email}</td>
+                        <td className="px-5 py-4 text-slate-500">{u.phone || '—'}</td>
+                        <td className="px-5 py-4 text-slate-500">{u.speciality || '—'}</td>
+                        <td className="px-5 py-4">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${u.active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
                             {u.active ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 py-4">
                           {u.role !== 'admin' && (
                             <button onClick={() => toggleActive(u)}
-                              className={`text-xs font-medium px-3 py-1.5 rounded-lg transition ${u.active ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>
+                              className={`text-xs font-semibold px-3.5 py-1.5 rounded-lg transition border ${u.active
+                                ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}>
                               {u.active ? 'Deactivate' : 'Activate'}
                             </button>
                           )}
                         </td>
-                      </tr>
+                      </motion.tr>
                     ))}
                   </tbody>
                 </table>
@@ -177,31 +203,37 @@ export default function AdminPanel() {
         {/* Reports tab */}
         {tab === 'reports' && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-            {reports ? (
-              <>
-                {/* Stats cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  {[
-                    { label: 'Total Today',    value: reports.stats.total_today,     color: 'sky' },
-                    { label: 'Completed',       value: reports.stats.done_today,      color: 'emerald' },
-                    { label: 'Emergencies',     value: reports.stats.emergency_today, color: 'red' },
-                    { label: 'Avg Wait (min)',  value: reports.stats.avg_wait_minutes ?? '—', color: 'amber' },
-                  ].map(s => (
-                    <div key={s.label} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                      <p className="text-xs text-slate-500 font-medium">{s.label}</p>
-                      <p className={`text-3xl font-bold mt-1 text-${s.color}-600`}>{s.value}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-end mb-4">
-                  <a href="/api/export" className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
-                    ↓ Export Excel
-                  </a>
-                </div>
-                <Charts data={reports} />
-              </>
-            ) : (
-              <div className="text-center py-20 text-slate-400">Loading reports…</div>
+            {/* Stats cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {stats.map((s, i) => (
+                <motion.div key={s.label}
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.07 }}
+                  className="card p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{s.label}</p>
+                    <span className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center text-base`}>{s.icon}</span>
+                  </div>
+                  <p className={`text-3xl font-black ${s.color}`}>{s.value}</p>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="flex justify-end mb-4">
+              <a href="/api/export"
+                className="btn-primary px-5 py-2.5 text-sm inline-flex items-center gap-2">
+                ↓ Export Excel
+              </a>
+            </div>
+
+            {reports ? <Charts data={reports} /> : (
+              <div className="text-center py-20 text-slate-400 flex flex-col items-center gap-3">
+                <svg className="w-8 h-8 animate-spin text-indigo-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Loading reports…
+              </div>
             )}
           </motion.div>
         )}
@@ -210,12 +242,15 @@ export default function AdminPanel() {
       {/* Add User Modal */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-              <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                <h3 className="font-semibold text-slate-800">{showModal === 'doctor' ? 'Add Doctor' : 'Add Staff Member'}</h3>
-                <button onClick={() => setShowModal(null)} className="text-slate-400 hover:text-slate-700 transition">✕</button>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-slate-100">
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg">{showModal === 'doctor' ? 'Add Doctor' : 'Add Staff Member'}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">{showModal === 'doctor' ? 'Create a new doctor account' : 'Create a data entry account'}</p>
+                </div>
+                <button onClick={() => setShowModal(null)} className="text-slate-400 hover:text-slate-700 transition p-2 rounded-xl hover:bg-slate-100">✕</button>
               </div>
               <form onSubmit={saveUser} className="p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -230,13 +265,13 @@ export default function AdminPanel() {
                     <MField label="Qualification" value={form.qualification || ''} onChange={set('qualification')} />
                   </>}
                 </div>
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setShowModal(null)}
-                    className="flex-1 border border-slate-300 text-slate-700 text-sm font-medium py-2.5 rounded-lg hover:bg-slate-50 transition">
+                    className="btn-secondary flex-1 py-3 text-sm">
                     Cancel
                   </button>
                   <button type="submit" disabled={saving}
-                    className="flex-1 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium py-2.5 rounded-lg transition disabled:opacity-60">
+                    className="btn-primary flex-1 py-3 text-sm">
                     {saving ? 'Creating…' : 'Create Account'}
                   </button>
                 </div>
@@ -248,8 +283,8 @@ export default function AdminPanel() {
 
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="fixed bottom-6 right-6 bg-slate-900 text-white text-sm px-5 py-3 rounded-xl shadow-xl z-[60]">
+          <motion.div initial={{ opacity: 0, y: 20, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed bottom-6 right-6 bg-gradient-to-r from-indigo-900 to-slate-900 text-white text-sm px-5 py-3.5 rounded-2xl shadow-2xl z-[60] border border-indigo-700/30">
             {toast}
           </motion.div>
         )}
@@ -265,13 +300,13 @@ function MField({ label, value, onChange, type = 'text', required }: {
   const isPw = type === 'password'
   return (
     <div>
-      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">{label}</label>
       <div className="relative">
         <input type={isPw && show ? 'text' : type} value={value} onChange={onChange} required={required}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition pr-8" />
+          className="field-input pr-9" />
         {isPw && (
           <button type="button" onClick={() => setShow(v => !v)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition">
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {show
                 ? <><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></>
