@@ -15,7 +15,7 @@ interface ReportData {
 }
 interface AttendanceRecord { id: number; doctor_name: string; speciality: string; shift_start: string; shift_end: string | null; total_minutes: number | null; breaks: { start: string; end: string | null }[] }
 interface InventoryItem { id: number; name: string; type: 'consumable' | 'permanent'; category: string; quantity: number; unit: string; expiry_date: string | null; status: string | null; notes: string; days_left: number | null; created_at: string }
-interface PaymentRecord { id: number; name: string; age: number; gender: string; queue_number: number; check_in_at: string; guardian_name: string; cnic_bform: string; phone: string; address: string; is_emergency: boolean; bp: string; temperature: string; pulse: string; weight: string; payment_method: string; bill_amount: number; discount: number; amount_paid: number; change_due: number; payment_status: string }
+interface PaymentRecord { id: number; name: string; age: number; gender: string; status: string; queue_number: number; check_in_at: string; guardian_name: string; cnic_bform: string; phone: string; address: string; is_emergency: boolean; bp: string; temperature: string; pulse: string; weight: string; payment_method: string; bill_amount: number; discount: number; amount_paid: number; change_due: number; payment_status: string }
 
 const blankDoctor = { role: 'doctor', name: '', email: '', password: '', phone: '', cnic: '', license_no: '', speciality: '', qualification: '' }
 const blankStaff  = { role: 'data_entry', name: '', email: '', password: '', phone: '' }
@@ -31,7 +31,7 @@ const blankItem = { name: '', type: 'consumable', category: '', quantity: '', un
 
 export default function AdminPanel() {
   const router = useRouter()
-  const [tab, setTab] = useState<'dashboard' | 'users' | 'reports' | 'inventory'>('dashboard')
+  const [tab, setTab] = useState<'dashboard' | 'users' | 'reports' | 'inventory' | 'patients'>('dashboard')
   const [users, setUsers] = useState<User[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0, 10))
@@ -48,6 +48,17 @@ export default function AdminPanel() {
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
   const [reportFrom, setReportFrom] = useState(new Date().toISOString().slice(0, 10))
   const [reportTo,   setReportTo]   = useState(new Date().toISOString().slice(0, 10))
+
+  // Patient search/filter state
+  const [ptSearch,        setPtSearch]        = useState('')
+  const [ptFrom,          setPtFrom]          = useState('')
+  const [ptTo,            setPtTo]            = useState('')
+  const [ptPayStatus,     setPtPayStatus]     = useState('')
+  const [ptGender,        setPtGender]        = useState('')
+  const [ptEmergency,     setPtEmergency]     = useState('')
+  const [ptResults,       setPtResults]       = useState<PaymentRecord[]>([])
+  const [ptLoading,       setPtLoading]       = useState(false)
+  const [ptSearched,      setPtSearched]      = useState(false)
   const [editingPayment, setEditingPayment] = useState<PaymentRecord | null>(null)
   const [discountEdit, setDiscountEdit] = useState('')
   const [savingDiscount, setSavingDiscount] = useState(false)
@@ -169,6 +180,22 @@ export default function AdminPanel() {
     else notify('Failed to delete patient')
   }
 
+  const searchPatients = async () => {
+    setPtLoading(true); setPtSearched(true)
+    const p = new URLSearchParams()
+    if (ptSearch)     p.set('search', ptSearch)
+    if (ptFrom)       p.set('from', ptFrom)
+    if (ptTo)         p.set('to', ptTo)
+    if (ptPayStatus)  p.set('payment_status', ptPayStatus)
+    if (ptGender)     p.set('gender', ptGender)
+    if (ptEmergency)  p.set('is_emergency', ptEmergency)
+    // always set at least one param so API enters search mode
+    if (!p.toString()) p.set('from', '2000-01-01')
+    const r = await fetch(`/api/patients?${p}`)
+    if (r.ok) setPtResults(await r.json())
+    setPtLoading(false)
+  }
+
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
 
   const stats = [
@@ -202,6 +229,7 @@ export default function AdminPanel() {
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 w-fit mb-6 shadow-sm">
           {([
             { key: 'dashboard', label: '🏠 Dashboard' },
+            { key: 'patients',  label: '🔍 Patients' },
             { key: 'users',     label: '👥 Users' },
             { key: 'reports',   label: '📊 Reports' },
             { key: 'inventory', label: '📦 Inventory' },
@@ -1011,6 +1039,181 @@ export default function AdminPanel() {
           </div>
         )}
       </AnimatePresence>
+
+        {/* Patients search tab */}
+        {tab === 'patients' && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+
+            {/* Search & filters */}
+            <div className="card p-5 space-y-4">
+              <h2 className="text-base font-bold text-slate-700">Search Patients</h2>
+
+              {/* Search bar */}
+              <div className="relative">
+                <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+                <input value={ptSearch} onChange={e => setPtSearch(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && searchPatients()}
+                  placeholder="Search by name, phone, or CNIC…"
+                  className="field-input pl-10 text-sm" />
+              </div>
+
+              {/* Filters row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">From Date</label>
+                  <input type="date" value={ptFrom} max={ptTo || undefined}
+                    onChange={e => setPtFrom(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm w-full" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">To Date</label>
+                  <input type="date" value={ptTo} min={ptFrom || undefined}
+                    onChange={e => setPtTo(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm w-full" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Payment Status</label>
+                  <select value={ptPayStatus} onChange={e => setPtPayStatus(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm w-full">
+                    <option value="">All</option>
+                    <option value="paid">Paid</option>
+                    <option value="partial">Partial</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Gender</label>
+                  <select value={ptGender} onChange={e => setPtGender(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm w-full">
+                    <option value="">All</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Emergency filter + actions */}
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={ptEmergency === 'true'}
+                    onChange={e => setPtEmergency(e.target.checked ? 'true' : '')}
+                    className="w-4 h-4 accent-red-500" />
+                  <span className="text-sm font-semibold text-red-600">Emergency only</span>
+                </label>
+                <div className="flex gap-2 ml-auto">
+                  <button onClick={() => { setPtSearch(''); setPtFrom(''); setPtTo(''); setPtPayStatus(''); setPtGender(''); setPtEmergency(''); setPtResults([]); setPtSearched(false) }}
+                    className="text-sm px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition">
+                    Clear
+                  </button>
+                  <button onClick={searchPatients} disabled={ptLoading}
+                    className="btn-primary px-6 py-2 text-sm">
+                    {ptLoading ? 'Searching…' : 'Search'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Results */}
+            {ptSearched && (
+              <div className="card overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                  <p className="text-sm font-bold text-slate-700">
+                    {ptLoading ? 'Loading…' : `${ptResults.length} patient${ptResults.length !== 1 ? 's' : ''} found`}
+                    {ptResults.length === 200 && <span className="text-xs font-normal text-amber-600 ml-2">(showing first 200 — refine your search)</span>}
+                  </p>
+                </div>
+                {ptLoading ? (
+                  <div className="py-16 text-center text-slate-400">
+                    <svg className="w-6 h-6 animate-spin text-indigo-400 mx-auto" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  </div>
+                ) : ptResults.length === 0 ? (
+                  <div className="py-16 text-center text-slate-400 text-sm">No patients found</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-100">
+                          {['#','Name','Age/Gender','Phone','Check-in','Status','Payment','Actions'].map(h => (
+                            <th key={h} className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ptResults.map((p, i) => {
+                          const net = Math.max(0, (p.bill_amount || 0) - (p.discount || 0))
+                          const dt  = new Date(p.check_in_at)
+                          return (
+                            <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }}
+                              className="border-t border-slate-100 hover:bg-slate-50/60 transition">
+                              <td className="px-4 py-3 font-black text-slate-500 tabular-nums">
+                                #{String(p.queue_number).padStart(3,'0')}
+                                {p.is_emergency && <span className="ml-1 text-red-500 text-xs font-bold">🚨</span>}
+                              </td>
+                              <td className="px-4 py-3">
+                                <p className="font-semibold text-slate-800">{p.name}</p>
+                                {p.cnic_bform && <p className="text-xs text-slate-400">{p.cnic_bform}</p>}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">
+                                {p.age} yrs
+                                <span className={`ml-1.5 text-xs font-semibold px-1.5 py-0.5 rounded-full
+                                  ${p.gender === 'female' ? 'bg-pink-100 text-pink-700' : p.gender === 'other' ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
+                                  {p.gender || 'male'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">{p.phone}</td>
+                              <td className="px-4 py-3 text-slate-500 whitespace-nowrap text-xs">
+                                {dt.toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                <br />
+                                {dt.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-1 rounded-full text-xs font-bold border
+                                  ${p.status === 'done' ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                  : p.status === 'in_progress' ? 'bg-amber-100 text-amber-700 border-amber-200'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                  {p.status === 'in_progress' ? 'Active' : p.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`text-xs font-bold
+                                  ${p.payment_status === 'paid' ? 'text-emerald-600' : p.payment_status === 'partial' ? 'text-amber-600' : 'text-slate-400'}`}>
+                                  {p.payment_status === 'paid' ? '✓ Paid' : p.payment_status === 'partial' ? 'Partial' : 'Pending'}
+                                </span>
+                                {net > 0 && <p className="text-xs text-slate-500">PKR {net.toLocaleString()}</p>}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => { setEditingPatient(p); setPatientForm({ ...p }) }}
+                                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition">
+                                    Edit
+                                  </button>
+                                  <button onClick={async () => {
+                                    if (!confirm(`Delete ${p.name}? This cannot be undone.`)) return
+                                    const r = await fetch(`/api/patients/${p.id}`, { method: 'DELETE' })
+                                    if (r.ok) { notify(`${p.name} deleted`); setPtResults(prev => prev.filter(x => x.id !== p.id)) }
+                                    else notify('Failed to delete')
+                                  }} className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition">
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </motion.div>
+        )}
 
       {/* Add User Modal */}
       <AnimatePresence>

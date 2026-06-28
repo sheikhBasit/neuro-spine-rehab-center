@@ -7,11 +7,44 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: Request) {
   try {
     await requireRole(['admin', 'doctor', 'data_entry'])
-    const date = new URL(req.url).searchParams.get('date') // YYYY-MM-DD, default today
+    const sp             = new URL(req.url).searchParams
+    const date           = sp.get('date')
+    const search         = sp.get('search')?.trim() || ''
+    const from           = sp.get('from')
+    const to             = sp.get('to')
+    const payment_status = sp.get('payment_status')
+    const gender         = sp.get('gender')
+    const is_emergency   = sp.get('is_emergency')  // 'true' | 'false' | null
+
+    // search mode: across all dates with filters
+    if (search || from || to || payment_status || gender || is_emergency !== null) {
+      const like   = `%${search}%`
+      const fromD  = from || '2000-01-01'
+      const toD    = to   || '2100-12-31'
+      const patients = await sql`
+        SELECT p.id, p.name, p.age, p.gender, p.guardian_name, p.cnic_bform, p.phone, p.address,
+               p.queue_number, p.is_emergency, p.status, p.check_in_at, p.seen_at,
+               p.bp, p.temperature, p.pulse, p.weight,
+               p.payment_method, p.bill_amount, p.discount, p.amount_paid, p.change_due, p.payment_status,
+               u.name AS doctor_name
+        FROM patients p LEFT JOIN users u ON p.seen_by_doctor_id = u.id
+        WHERE p.check_in_at::date BETWEEN ${fromD}::date AND ${toD}::date
+          AND (${search} = '' OR p.name ILIKE ${like} OR p.phone ILIKE ${like} OR p.cnic_bform ILIKE ${like})
+          AND (${payment_status || ''} = '' OR p.payment_status = ${payment_status || ''})
+          AND (${gender || ''} = '' OR p.gender = ${gender || ''})
+          AND (${is_emergency || ''} = '' OR p.is_emergency = ${is_emergency === 'true'})
+        ORDER BY p.check_in_at DESC
+        LIMIT 200
+      `
+      return NextResponse.json(patients)
+    }
+
+    // default: single date queue (existing behaviour)
     const patients = await sql`
       SELECT
-        p.id, p.name, p.age, p.guardian_name, p.cnic_bform, p.phone, p.address,
+        p.id, p.name, p.age, p.gender, p.guardian_name, p.cnic_bform, p.phone, p.address,
         p.queue_number, p.is_emergency, p.status, p.check_in_at, p.seen_at,
+        p.bp, p.temperature, p.pulse, p.weight,
         p.payment_method, p.bill_amount, p.discount, p.amount_paid, p.change_due, p.payment_status,
         u.name AS doctor_name
       FROM patients p
