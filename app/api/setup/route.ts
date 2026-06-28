@@ -91,6 +91,24 @@ export async function GET(req: Request) {
     `
     log.push('✓ attendance table')
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS inventory_items (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('consumable','permanent')),
+        category TEXT DEFAULT '',
+        quantity INT NOT NULL DEFAULT 0,
+        unit TEXT DEFAULT '',
+        expiry_date DATE,
+        status TEXT CHECK (status IN ('active','inactive')),
+        notes TEXT DEFAULT '',
+        added_by INT REFERENCES users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+    log.push('✓ inventory_items table')
+
     const adminEmail = 'admin@admin.com'
     const adminPassword = 'admin123'
     const [existing] = await sql`SELECT id FROM users WHERE email = ${adminEmail} LIMIT 1`

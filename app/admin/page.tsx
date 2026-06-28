@@ -14,6 +14,7 @@ interface ReportData {
   statusBreakdown: { status: string; count: number }[]
 }
 interface AttendanceRecord { id: number; doctor_name: string; speciality: string; shift_start: string; shift_end: string | null; total_minutes: number | null; breaks: { start: string; end: string | null }[] }
+interface InventoryItem { id: number; name: string; type: 'consumable' | 'permanent'; category: string; quantity: number; unit: string; expiry_date: string | null; status: string | null; notes: string; days_left: number | null; created_at: string }
 
 const blankDoctor = { role: 'doctor', name: '', email: '', password: '', phone: '', cnic: '', license_no: '', speciality: '', qualification: '' }
 const blankStaff  = { role: 'data_entry', name: '', email: '', password: '', phone: '' }
@@ -25,12 +26,22 @@ const roleColor: Record<string, string> = {
 }
 const roleLabel: Record<string, string> = { admin: 'Admin', doctor: 'Doctor', data_entry: 'Data Entry' }
 
+const blankItem = { name: '', type: 'consumable', category: '', quantity: '', unit: '', expiry_date: '', status: 'active', notes: '' }
+
 export default function AdminPanel() {
   const router = useRouter()
-  const [tab, setTab] = useState<'dashboard' | 'users' | 'reports'>('dashboard')
+  const [tab, setTab] = useState<'dashboard' | 'users' | 'reports' | 'inventory'>('dashboard')
   const [users, setUsers] = useState<User[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [reports, setReports] = useState<ReportData | null>(null)
+  const [inventory, setInventory] = useState<InventoryItem[]>([])
+  const [expiryAlerts, setExpiryAlerts] = useState<InventoryItem[]>([])
+  const [invFilter, setInvFilter] = useState<'all' | 'consumable' | 'permanent'>('all')
+  const [showItemModal, setShowItemModal] = useState<'add' | 'edit' | null>(null)
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null)
+  const [itemForm, setItemForm] = useState<Record<string, string>>(blankItem)
+  const [savingItem, setSavingItem] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState(false)
   const [showModal, setShowModal] = useState<'doctor' | 'staff' | null>(null)
   const [form, setForm] = useState<Record<string, string>>(blankDoctor)
   const [saving, setSaving] = useState(false)
@@ -63,6 +74,16 @@ export default function AdminPanel() {
     if (r.ok) setAttendance(await r.json())
   }, [])
 
+  const loadInventory = useCallback(async () => {
+    const r = await fetch('/api/inventory')
+    if (r.ok) setInventory(await r.json())
+  }, [])
+
+  const loadExpiryAlerts = useCallback(async () => {
+    const r = await fetch('/api/inventory?alert=true')
+    if (r.ok) setExpiryAlerts(await r.json())
+  }, [])
+
   useEffect(() => {
     const cachedUsers = localStorage.getItem('cache_admin_users')
     if (cachedUsers) setUsers(JSON.parse(cachedUsers))
@@ -70,7 +91,8 @@ export default function AdminPanel() {
     loadUsers()
     loadReports()
     loadAttendance()
-  }, [loadUsers, loadReports, loadAttendance])
+    loadExpiryAlerts()
+  }, [loadUsers, loadReports, loadAttendance, loadExpiryAlerts])
 
   useEffect(() => {
     if (tab === 'reports') {
@@ -78,7 +100,8 @@ export default function AdminPanel() {
       if (cachedReports) setReports(JSON.parse(cachedReports))
       loadReports()
     }
-  }, [tab, loadReports])
+    if (tab === 'inventory') loadInventory()
+  }, [tab, loadReports, loadInventory])
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
@@ -145,6 +168,7 @@ export default function AdminPanel() {
             { key: 'dashboard', label: '🏠 Dashboard' },
             { key: 'users',     label: '👥 Users' },
             { key: 'reports',   label: '📊 Reports' },
+            { key: 'inventory', label: '📦 Inventory' },
           ] as const).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`px-6 py-2 text-sm font-semibold rounded-lg transition ${tab === t.key ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
@@ -156,6 +180,41 @@ export default function AdminPanel() {
         {/* Dashboard tab */}
         {tab === 'dashboard' && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+
+            {/* Expiry alert banner */}
+            {expiryAlerts.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                className="rounded-2xl border-2 border-red-200 bg-gradient-to-r from-red-50 to-orange-50 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xl">⚠️</span>
+                      <p className="font-bold text-red-700 text-base">
+                        {expiryAlerts.filter(i => (i.days_left ?? 99) <= 0).length > 0 ? 'Items Expired / Expiring Soon' : 'Consumables Expiring Soon'}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {expiryAlerts.map(item => (
+                        <span key={item.id} className={`text-xs px-3 py-1.5 rounded-full font-bold border ${(item.days_left ?? 99) <= 0 ? 'bg-red-100 text-red-700 border-red-300' : (item.days_left ?? 99) <= 7 ? 'bg-orange-100 text-orange-700 border-orange-300' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+                          {item.name} — {(item.days_left ?? 99) <= 0 ? 'EXPIRED' : `${item.days_left}d left`}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={async () => {
+                    setSendingEmail(true)
+                    const r = await fetch('/api/inventory/alerts', { method: 'POST' })
+                    const d = await r.json()
+                    notify(d.ok ? `Alert email sent to admin ✓` : d.reason || d.error || 'Email not configured')
+                    setSendingEmail(false)
+                  }} disabled={sendingEmail}
+                    className="shrink-0 bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition disabled:opacity-60 shadow-sm">
+                    {sendingEmail ? 'Sending…' : '📧 Send Email Alert'}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             {/* Today stats */}
             <div>
               <h2 className="text-base font-bold text-slate-500 uppercase tracking-wider mb-3">Today at a Glance</h2>
@@ -369,7 +428,200 @@ export default function AdminPanel() {
             )}
           </motion.div>
         )}
+
+        {/* Inventory tab */}
+        {tab === 'inventory' && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+                {(['all', 'consumable', 'permanent'] as const).map(f => (
+                  <button key={f} onClick={() => { setInvFilter(f); if (f !== invFilter) loadInventory() }}
+                    className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition ${invFilter === f ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}>
+                    {f === 'all' ? 'All Items' : f === 'consumable' ? '💊 Consumables' : '🔧 Permanent'}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => { setItemForm(blankItem); setEditingItem(null); setShowItemModal('add'); loadInventory() }}
+                className="btn-primary px-5 py-2.5 text-sm">
+                + Add Item
+              </button>
+            </div>
+
+            {/* Inventory table */}
+            {inventory.length === 0 ? (
+              <div className="card p-12 text-center text-slate-400">
+                <p className="text-4xl mb-3">📦</p>
+                <p className="font-semibold">No inventory items yet</p>
+                <p className="text-sm mt-1">Add consumables (with expiry dates) or permanent equipment</p>
+              </div>
+            ) : (
+              <div className="card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      {['Item', 'Type', 'Category', 'Qty', 'Expiry / Status', 'Notes', ''].map(h => (
+                        <th key={h} className="px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventory
+                      .filter(i => invFilter === 'all' || i.type === invFilter)
+                      .map((item, idx) => {
+                        const expired = item.type === 'consumable' && item.days_left !== null && item.days_left <= 0
+                        const expiringSoon = item.type === 'consumable' && item.days_left !== null && item.days_left > 0 && item.days_left <= 30
+                        return (
+                          <motion.tr key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }}
+                            className={`border-t border-slate-100 transition ${expired ? 'bg-red-50/60' : expiringSoon ? 'bg-amber-50/40' : 'hover:bg-slate-50'}`}>
+                            <td className="px-5 py-3.5 font-semibold text-slate-800">{item.name}</td>
+                            <td className="px-5 py-3.5">
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${item.type === 'consumable' ? 'bg-violet-100 text-violet-700 border-violet-200' : 'bg-sky-100 text-sky-700 border-sky-200'}`}>
+                                {item.type === 'consumable' ? '💊 Consumable' : '🔧 Permanent'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-500">{item.category || '—'}</td>
+                            <td className="px-5 py-3.5 font-bold text-slate-700">{item.quantity} <span className="font-normal text-slate-400 text-xs">{item.unit}</span></td>
+                            <td className="px-5 py-3.5">
+                              {item.type === 'consumable' ? (
+                                item.expiry_date ? (
+                                  <span className={`font-bold text-xs ${expired ? 'text-red-600' : expiringSoon ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                    {expired ? '🔴 EXPIRED' : expiringSoon ? `⚠️ ${item.days_left}d left` : `✓ ${new Date(item.expiry_date).toLocaleDateString()}`}
+                                  </span>
+                                ) : '—'
+                              ) : (
+                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                  {item.status === 'active' ? 'Active' : 'Inactive'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3.5 text-slate-500 max-w-[150px] truncate">{item.notes || '—'}</td>
+                            <td className="px-5 py-3.5">
+                              <div className="flex gap-2">
+                                <button onClick={() => {
+                                  setEditingItem(item)
+                                  setItemForm({
+                                    name: item.name, type: item.type, category: item.category || '', quantity: String(item.quantity),
+                                    unit: item.unit || '', expiry_date: item.expiry_date ? item.expiry_date.split('T')[0] : '',
+                                    status: item.status || 'active', notes: item.notes || ''
+                                  })
+                                  setShowItemModal('edit')
+                                }} className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition">
+                                  Edit
+                                </button>
+                                <button onClick={async () => {
+                                  if (!confirm('Delete this item?')) return
+                                  await fetch(`/api/inventory/${item.id}`, { method: 'DELETE' })
+                                  notify('Item deleted')
+                                  await loadInventory()
+                                  await loadExpiryAlerts()
+                                }} className="text-xs text-red-600 hover:text-red-800 font-semibold px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 transition">
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </motion.div>
+        )}
       </div>
+
+      {/* Add / Edit Item Modal */}
+      <AnimatePresence>
+        {showItemModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg border border-slate-100 overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="font-bold text-slate-800 text-lg">{showItemModal === 'add' ? 'Add Inventory Item' : 'Edit Item'}</h3>
+                <button onClick={() => setShowItemModal(null)} className="text-slate-400 hover:text-slate-700 transition p-2 rounded-xl hover:bg-slate-100">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Item Name *</label>
+                    <input value={itemForm.name} onChange={e => setItemForm(f => ({ ...f, name: e.target.value }))}
+                      placeholder="e.g. Surgical Gloves, Stethoscope" className="field-input" required />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Type *</label>
+                    <select value={itemForm.type} onChange={e => setItemForm(f => ({ ...f, type: e.target.value }))} className="field-input">
+                      <option value="consumable">💊 Consumable</option>
+                      <option value="permanent">🔧 Permanent</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Category</label>
+                    <input value={itemForm.category} onChange={e => setItemForm(f => ({ ...f, category: e.target.value }))}
+                      placeholder="e.g. PPE, Equipment" className="field-input" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Quantity</label>
+                    <input type="number" min={0} value={itemForm.quantity} onChange={e => setItemForm(f => ({ ...f, quantity: e.target.value }))}
+                      placeholder="0" className="field-input" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Unit</label>
+                    <input value={itemForm.unit} onChange={e => setItemForm(f => ({ ...f, unit: e.target.value }))}
+                      placeholder="boxes, pieces, bottles…" className="field-input" />
+                  </div>
+                  {itemForm.type === 'consumable' ? (
+                    <div className="col-span-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Expiry Date</label>
+                      <input type="date" value={itemForm.expiry_date} onChange={e => setItemForm(f => ({ ...f, expiry_date: e.target.value }))}
+                        className="field-input" />
+                    </div>
+                  ) : (
+                    <div className="col-span-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Status</label>
+                      <div className="flex gap-3">
+                        {['active', 'inactive'].map(s => (
+                          <label key={s} className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 cursor-pointer transition font-bold text-sm
+                            ${itemForm.status === s ? s === 'active' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-400 bg-slate-50 text-slate-600' : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}>
+                            <input type="radio" className="sr-only" value={s} checked={itemForm.status === s} onChange={() => setItemForm(f => ({ ...f, status: s }))} />
+                            {s === 'active' ? '✓ Active' : '○ Inactive'}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="col-span-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Notes</label>
+                    <input value={itemForm.notes} onChange={e => setItemForm(f => ({ ...f, notes: e.target.value }))}
+                      placeholder="Optional notes" className="field-input" />
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => setShowItemModal(null)} className="btn-secondary flex-1 py-3 text-sm">Cancel</button>
+                  <button disabled={savingItem} onClick={async () => {
+                    if (!itemForm.name) return notify('Item name is required')
+                    setSavingItem(true)
+                    const body = { ...itemForm, quantity: parseInt(itemForm.quantity) || 0 }
+                    const r = editingItem
+                      ? await fetch(`/api/inventory/${editingItem.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                      : await fetch('/api/inventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                    if (r.ok) {
+                      notify(editingItem ? 'Item updated ✓' : 'Item added ✓')
+                      setShowItemModal(null)
+                      await loadInventory()
+                      await loadExpiryAlerts()
+                    } else {
+                      const d = await r.json(); notify(d.error || 'Failed')
+                    }
+                    setSavingItem(false)
+                  }} className="btn-primary flex-1 py-3 text-sm">
+                    {savingItem ? 'Saving…' : editingItem ? 'Save Changes' : 'Add Item'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Add User Modal */}
       <AnimatePresence>
