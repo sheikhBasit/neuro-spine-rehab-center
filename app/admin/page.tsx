@@ -46,6 +46,8 @@ export default function AdminPanel() {
   const [sendingEmail, setSendingEmail] = useState(false)
   const [payments, setPayments] = useState<PaymentRecord[]>([])
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
+  const [reportFrom, setReportFrom] = useState(new Date().toISOString().slice(0, 10))
+  const [reportTo,   setReportTo]   = useState(new Date().toISOString().slice(0, 10))
   const [editingPayment, setEditingPayment] = useState<PaymentRecord | null>(null)
   const [discountEdit, setDiscountEdit] = useState('')
   const [savingDiscount, setSavingDiscount] = useState(false)
@@ -67,14 +69,16 @@ export default function AdminPanel() {
     }
   }, [router])
 
-  const loadReports = useCallback(async () => {
-    const r = await fetch('/api/reports')
+  const loadReports = useCallback(async (from?: string, to?: string) => {
+    const f = from ?? reportFrom
+    const t = to   ?? reportTo
+    const r = await fetch(`/api/reports?from=${f}&to=${t}`)
     if (r.ok) {
       const data = await r.json()
       setReports(data)
       localStorage.setItem('cache_admin_reports', JSON.stringify(data))
     }
-  }, [])
+  }, [reportFrom, reportTo])
 
   const loadAttendance = useCallback(async (date?: string) => {
     const d = date ?? attendanceDate
@@ -254,7 +258,7 @@ export default function AdminPanel() {
                 <div className="flex gap-2 items-center">
                   <input type="date" value={attendanceDate} max={new Date().toISOString().slice(0, 10)}
                     onChange={e => { setAttendanceDate(e.target.value); loadAttendance(e.target.value) }}
-                    className="field-input text-sm py-1.5 w-40" />
+                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" />
                   {attendanceDate !== new Date().toISOString().slice(0, 10) && (
                     <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setAttendanceDate(t); loadAttendance(t) }}
                       className="text-xs text-indigo-600 font-bold hover:text-indigo-800 transition">Today</button>
@@ -327,7 +331,7 @@ export default function AdminPanel() {
                 <div className="flex gap-2 items-center">
                   <input type="date" value={payDate} max={new Date().toISOString().slice(0, 10)}
                     onChange={e => { setPayDate(e.target.value); loadPayments(e.target.value) }}
-                    className="field-input text-sm py-1.5 w-44" />
+                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" />
                   {payDate !== new Date().toISOString().slice(0, 10) && (
                     <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setPayDate(t); loadPayments(t) }}
                       className="text-xs text-indigo-600 font-bold hover:text-indigo-800 transition">Today</button>
@@ -564,9 +568,52 @@ export default function AdminPanel() {
 
         {/* Reports tab */}
         {tab === 'reports' && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+
+            {/* Date range picker */}
+            <div className="card p-4 flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-3 flex-1">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">From</label>
+                  <input type="date" value={reportFrom} max={reportTo}
+                    onChange={e => setReportFrom(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" />
+                </div>
+                <span className="text-slate-400 font-bold">—</span>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">To</label>
+                  <input type="date" value={reportTo} min={reportFrom} max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => setReportTo(e.target.value)}
+                    className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {[
+                  { label: 'Today',    f: 0, t: 0 },
+                  { label: '7 days',   f: 6, t: 0 },
+                  { label: '30 days',  f: 29, t: 0 },
+                  { label: '90 days',  f: 89, t: 0 },
+                ].map(p => {
+                  const toD   = new Date().toISOString().slice(0, 10)
+                  const fromD = new Date(Date.now() - p.f * 86400000).toISOString().slice(0, 10)
+                  const active = reportFrom === fromD && reportTo === toD
+                  return (
+                    <button key={p.label} onClick={() => { setReportFrom(fromD); setReportTo(toD); loadReports(fromD, toD) }}
+                      className={`text-xs px-3 py-2 rounded-lg font-bold transition border
+                        ${active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700'}`}>
+                      {p.label}
+                    </button>
+                  )
+                })}
+                <button onClick={() => loadReports()}
+                  className="text-xs px-4 py-2 rounded-lg font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition shadow-sm">
+                  Apply
+                </button>
+              </div>
+            </div>
+
             {/* Stats cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {stats.map((s, i) => (
                 <motion.div key={s.label}
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -581,7 +628,7 @@ export default function AdminPanel() {
               ))}
             </div>
 
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-end">
               <a href="/api/export"
                 className="btn-primary px-5 py-2.5 text-sm inline-flex items-center gap-2">
                 ↓ Export Excel
