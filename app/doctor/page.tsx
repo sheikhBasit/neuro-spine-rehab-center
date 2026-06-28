@@ -182,8 +182,10 @@ export default function DoctorPanel() {
     setActionLoading(false)
   }
 
-  const savePrescription = async () => {
+  const savePrescription = async (andPrint = false) => {
     if (!selected) return
+    if (rxTab === 'manual' && !rxComplaint.trim()) { notify('Chief Complaint is required'); return }
+    if (rxTab === 'manual' && !rxDiagnosis.trim())  { notify('Diagnosis is required'); return }
     setRxSaving(true)
     const fd = new FormData()
     fd.append('patient_id', String(selected.id))
@@ -196,9 +198,6 @@ export default function DoctorPanel() {
     fd.append('advice',      rxAdvice)
     if (rxTab === 'manual') {
       const valid = medicines.filter(m => m.name.trim())
-      if (!valid.length && !rxDiagnosis && !rxAdvice && rxLabTests.length === 0) {
-        notify('Fill at least one section'); setRxSaving(false); return
-      }
       if (valid.length) fd.append('medicines', JSON.stringify(valid))
     } else if (rxImage) {
       fd.append('file', rxImage)
@@ -207,7 +206,11 @@ export default function DoctorPanel() {
     }
     const r = await fetch('/api/prescriptions', { method: 'POST', body: fd })
     if (r.ok) {
+      const saved = await r.json()
+      // Merge doctor info from current session so printPrescription has it
+      const forPrint = { ...saved, doctor_name: user?.name, qualification: user?.qualification, speciality: user?.speciality, license_no: user?.license_no }
       notify('Prescription saved ✓')
+      if (andPrint) printPrescription(forPrint)
       setMedicines([{ name: '', dosage: '', instructions: '' }])
       setRxNotes(''); setRxImage(null)
       setRxComplaint(''); setRxHistory(''); setRxExamination('')
@@ -564,31 +567,55 @@ export default function DoctorPanel() {
                     </div>
 
                     {rxTab === 'manual' ? (
-                      <>
-                        {/* Clinical sections */}
-                        {[
-                          { label: 'Chief Complaint', val: rxComplaint, set: setRxComplaint, ph: 'Main symptom or reason for visit…' },
-                          { label: 'History',         val: rxHistory,   set: setRxHistory,   ph: 'Relevant medical / family history…' },
-                          { label: 'Examination',     val: rxExamination, set: setRxExamination, ph: 'Physical examination findings…' },
-                          { label: 'Diagnosis',       val: rxDiagnosis, set: setRxDiagnosis, ph: 'Clinical diagnosis…' },
-                        ].map(s => (
-                          <div key={s.label}>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{s.label}</label>
-                            <textarea value={s.val} onChange={e => s.set(e.target.value)} placeholder={s.ph}
-                              rows={2} className="field-input resize-none text-sm" />
+                      <div className="space-y-4">
+                        {/* Row 1: Complaint (required) + History */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">
+                              Chief Complaint <span className="text-red-500">*</span>
+                            </label>
+                            <textarea value={rxComplaint} onChange={e => setRxComplaint(e.target.value)}
+                              placeholder="Main symptom or reason for visit…" rows={3}
+                              className={`field-input resize-none text-sm ${!rxComplaint.trim() ? 'border-red-200 focus:ring-red-400' : ''}`} />
                           </div>
-                        ))}
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">History</label>
+                            <textarea value={rxHistory} onChange={e => setRxHistory(e.target.value)}
+                              placeholder="Relevant medical / family history…" rows={3}
+                              className="field-input resize-none text-sm" />
+                          </div>
+                        </div>
+
+                        {/* Row 2: Examination + Diagnosis (required) */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">Examination</label>
+                            <textarea value={rxExamination} onChange={e => setRxExamination(e.target.value)}
+                              placeholder="Physical examination findings…" rows={3}
+                              className="field-input resize-none text-sm" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-600 mb-1">
+                              Diagnosis <span className="text-red-500">*</span>
+                            </label>
+                            <textarea value={rxDiagnosis} onChange={e => setRxDiagnosis(e.target.value)}
+                              placeholder="Clinical diagnosis…" rows={3}
+                              className={`field-input resize-none text-sm font-semibold ${!rxDiagnosis.trim() ? 'border-red-200 focus:ring-red-400' : 'border-indigo-300'}`} />
+                          </div>
+                        </div>
 
                         {/* Lab tests */}
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Investigations / Lab Tests</label>
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        <div className="bg-violet-50/50 border border-violet-100 rounded-xl p-3">
+                          <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                            Investigations / Lab Tests
+                            {rxLabTests.length > 0 && <span className="ml-2 text-violet-600 normal-case font-semibold">({rxLabTests.length} selected)</span>}
+                          </label>
+                          <div className="grid grid-cols-3 gap-1.5">
                             {LAB_TESTS.map(t => (
-                              <label key={t} className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border-2 transition text-xs font-semibold
-                                ${rxLabTests.includes(t) ? 'border-violet-400 bg-violet-50 text-violet-700' : 'border-slate-200 text-slate-500 hover:border-violet-300'}`}>
-                                <input type="checkbox" className="sr-only" checked={rxLabTests.includes(t)}
-                                  onChange={e => setRxLabTests(prev => e.target.checked ? [...prev, t] : prev.filter(x => x !== t))} />
-                                <span className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center
+                              <label key={t} onClick={() => setRxLabTests(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])}
+                                className={`flex items-center gap-2 cursor-pointer px-2.5 py-2 rounded-lg border transition text-xs font-semibold select-none
+                                  ${rxLabTests.includes(t) ? 'border-violet-400 bg-violet-100 text-violet-800' : 'border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:bg-violet-50'}`}>
+                                <span className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center transition
                                   ${rxLabTests.includes(t) ? 'bg-violet-500 border-violet-500 text-white' : 'border-slate-300'}`}>
                                   {rxLabTests.includes(t) && <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
                                 </span>
@@ -598,39 +625,47 @@ export default function DoctorPanel() {
                           </div>
                         </div>
 
-                        {/* Medicines */}
-                        <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Rx — Medicines</label>
+                        {/* Medicines table */}
+                        <div className="bg-indigo-50/40 border border-indigo-100 rounded-xl p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Rx — Medicines</label>
+                            <button onClick={addMed} className="text-xs text-indigo-600 hover:text-indigo-800 font-bold bg-indigo-100 hover:bg-indigo-200 px-2.5 py-1 rounded-lg transition">+ Add</button>
+                          </div>
                           <div className="space-y-2">
+                            <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-400 uppercase tracking-wide px-1">
+                              <span className="col-span-5">Medicine</span>
+                              <span className="col-span-3">Dosage</span>
+                              <span className="col-span-3">Instructions</span>
+                            </div>
                             {medicines.map((m, i) => (
-                              <div key={i} className="grid grid-cols-12 gap-2 items-start">
+                              <div key={i} className="grid grid-cols-12 gap-2 items-center">
                                 <input value={m.name} onChange={e => updateMed(i, 'name', e.target.value)}
-                                  placeholder="Medicine name" className="col-span-5 field-input text-sm py-2" />
+                                  placeholder={`Medicine ${i + 1}`} className="col-span-5 field-input text-sm py-2" />
                                 <input value={m.dosage} onChange={e => updateMed(i, 'dosage', e.target.value)}
-                                  placeholder="Dosage" className="col-span-3 field-input text-sm py-2" />
+                                  placeholder="e.g. 500mg" className="col-span-3 field-input text-sm py-2" />
                                 <input value={m.instructions} onChange={e => updateMed(i, 'instructions', e.target.value)}
-                                  placeholder="Timing/instructions" className="col-span-3 field-input text-sm py-2" />
-                                {medicines.length > 1 && (
-                                  <button onClick={() => removeMed(i)} className="col-span-1 text-slate-400 hover:text-red-500 transition text-lg text-center pt-1.5">✕</button>
-                                )}
+                                  placeholder="1×0×1 / Morning…" className="col-span-3 field-input text-sm py-2" />
+                                <button onClick={() => removeMed(i)}
+                                  className="col-span-1 text-slate-300 hover:text-red-500 transition text-xl text-center leading-none">×</button>
                               </div>
                             ))}
-                            <button onClick={addMed} className="text-xs text-indigo-600 hover:text-indigo-700 font-bold">+ Add Medicine</button>
                           </div>
                         </div>
 
-                        {/* Advice & Notes */}
+                        {/* Advice */}
                         <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Advice</label>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Advice</label>
                           <textarea value={rxAdvice} onChange={e => setRxAdvice(e.target.value)}
-                            placeholder="Rest, diet, follow-up instructions…" rows={2} className="field-input resize-none text-sm" />
+                            placeholder="Rest, diet, follow-up date, next visit…" rows={2}
+                            className="field-input resize-none text-sm" />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Notes</label>
+                          <label className="block text-xs font-bold text-slate-600 mb-1">Internal Notes <span className="font-normal text-slate-400">(not printed)</span></label>
                           <textarea value={rxNotes} onChange={e => setRxNotes(e.target.value)}
-                            placeholder="Internal notes (optional)" rows={1} className="field-input resize-none text-sm" />
+                            placeholder="Notes only visible to clinic staff…" rows={1}
+                            className="field-input resize-none text-sm" />
                         </div>
-                      </>
+                      </div>
                     ) : (
                       <label className="flex flex-col items-center justify-center h-28 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition bg-white">
                         {rxImage ? <p className="text-sm text-slate-600 font-medium">{rxImage.name}</p> : (
@@ -641,10 +676,19 @@ export default function DoctorPanel() {
                       </label>
                     )}
 
-                    <button onClick={savePrescription} disabled={rxSaving}
-                      className="btn-primary w-full py-3.5 text-base">
-                      {rxSaving ? 'Saving…' : '💾 Save Prescription'}
-                    </button>
+                    {/* Action buttons */}
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={() => savePrescription(false)} disabled={rxSaving}
+                        className="flex-1 py-3 rounded-xl font-bold text-sm border-2 border-indigo-600 text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-50">
+                        {rxSaving ? 'Saving…' : '💾 Save'}
+                      </button>
+                      {rxTab === 'manual' && (
+                        <button onClick={() => savePrescription(true)} disabled={rxSaving}
+                          className="flex-1 btn-primary py-3 text-sm">
+                          {rxSaving ? '…' : '🖨 Save & Print'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </motion.div>

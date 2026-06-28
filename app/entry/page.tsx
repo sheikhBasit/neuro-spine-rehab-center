@@ -136,21 +136,33 @@ export default function EntryPanel() {
     }
 
     notify(`Patient #${String(data.queue_number).padStart(3, '0')} registered${docWarn ? ' (⚠ ' + docWarn + ')' : ''}`)
-    setForm(blank); setFiles([]); setFileKey(k => k + 1); setPhoneError(''); setCnicError('')
-
-    // Refresh the queue for the registered date
-    const regDate = (form.check_in_at || new Date().toISOString()).slice(0, 10)
-    setQueueDate(regDate)
-    await loadQueue(regDate)
+    // Keep check_in_at pinned to selected date so batch entry stays on same date
+    const keepDate = queueDate
+    setForm({ ...blank, check_in_at: isToday ? '' : `${keepDate}T09:00` })
+    setFiles([]); setFileKey(k => k + 1); setPhoneError(''); setCnicError('')
+    await loadQueue(keepDate)
     setSubmitting(false)
   }
 
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
 
+  const todayISO = new Date().toISOString().slice(0, 10)
+  const isToday  = queueDate === todayISO
+
+  // When the date changes, sync form.check_in_at so new registrations land on that date
+  const changeDate = (date: string) => {
+    setQueueDate(date)
+    if (date === todayISO) {
+      setForm(f => ({ ...f, check_in_at: '' }))  // blank = use server NOW()
+    } else {
+      setForm(f => ({ ...f, check_in_at: `${date}T09:00` }))
+    }
+    loadQueue(date)
+  }
+
   const waiting    = patients.filter(p => p.status === 'waiting').length
   const inProgress = patients.filter(p => p.status === 'in_progress').length
   const done       = patients.filter(p => p.status === 'done').length
-  const isToday    = queueDate === new Date().toISOString().slice(0, 10)
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-indigo-50/20 to-slate-50">
@@ -160,9 +172,30 @@ export default function EntryPanel() {
           <div className="w-9 h-9 bg-gradient-to-br from-indigo-400 to-sky-400 rounded-xl flex items-center justify-center text-sm font-bold shadow-md">NS</div>
           <div>
             <p className="font-bold text-sm leading-tight">Neuro Spine Rehab Center</p>
-            <p className="text-indigo-300 text-xs">{dateLabel(queueDate)}</p>
+            <p className="text-indigo-300 text-xs">Data Entry</p>
           </div>
         </div>
+
+        {/* Central date selector — controls both view & add */}
+        <div className="flex items-center gap-2 bg-indigo-900/60 border border-indigo-700/40 rounded-xl px-3 py-1.5">
+          {!isToday && (
+            <button onClick={() => changeDate(todayISO)}
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-bold transition whitespace-nowrap">
+              ← Today
+            </button>
+          )}
+          <input
+            type="date"
+            value={queueDate}
+            max={todayISO}
+            onChange={e => changeDate(e.target.value)}
+            className="bg-transparent text-white text-sm font-semibold focus:outline-none cursor-pointer [color-scheme:dark]"
+          />
+          {!isToday && (
+            <span className="text-xs text-amber-400 font-bold whitespace-nowrap">📅 Historical</span>
+          )}
+        </div>
+
         <div className="flex items-center gap-3">
           <span className="text-xs bg-indigo-800/60 border border-indigo-700/40 px-3 py-1.5 rounded-full font-medium">
             Data Entry{user ? ` · ${user.name}` : ''}
@@ -183,7 +216,11 @@ export default function EntryPanel() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-800">Register Patient</h2>
-                <p className="text-xs text-slate-500">Fill details to add to the queue</p>
+                <p className="text-xs text-slate-500">
+                  Adding to: <span className={`font-bold ${isToday ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {isToday ? 'Today' : dateLabel(queueDate)}
+                  </span>
+                </p>
               </div>
             </div>
 
@@ -268,20 +305,21 @@ export default function EntryPanel() {
                 </div>
               </div>
 
-              {/* Check-in date & time (for backdated / custom entry) */}
-              <div className="card p-5">
+              {/* Check-in date & time */}
+              <div className={`card p-5 ${!isToday ? 'border-2 border-amber-300 bg-amber-50/40' : ''}`}>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                  Check-in Date &amp; Time
-                  <span className="ml-2 text-xs font-normal text-slate-400">(leave blank for now)</span>
+                  Date &amp; Time of Visit
+                  {!isToday && <span className="ml-2 text-xs font-bold text-amber-600">← set from date picker above</span>}
+                  {isToday && <span className="ml-2 text-xs font-normal text-slate-400">(defaults to now — change to backdate)</span>}
                 </label>
                 <div className="flex gap-3 items-center">
                   <input type="datetime-local" value={form.check_in_at}
                     max={todayStr()}
                     onChange={e => setForm(f => ({ ...f, check_in_at: e.target.value }))}
                     className="field-input flex-1" />
-                  {form.check_in_at && (
+                  {form.check_in_at && isToday && (
                     <button type="button" onClick={() => setForm(f => ({ ...f, check_in_at: '' }))}
-                      className="text-xs text-slate-400 hover:text-slate-600 transition whitespace-nowrap">✕ Clear</button>
+                      className="text-xs text-slate-400 hover:text-slate-600 transition whitespace-nowrap">✕ Now</button>
                   )}
                 </div>
               </div>
@@ -415,13 +453,13 @@ export default function EntryPanel() {
                 </span>
               </div>
 
-              {/* Date picker */}
+              {/* Date picker — mirrors the navbar date selector */}
               <div className="flex gap-2 items-center mb-3">
-                <input type="date" value={queueDate} max={new Date().toISOString().slice(0, 10)}
-                  onChange={e => { setQueueDate(e.target.value); loadQueue(e.target.value) }}
-                  className="field-input flex-1 text-sm py-1.5" />
+                <input type="date" value={queueDate} max={todayISO}
+                  onChange={e => changeDate(e.target.value)}
+                  className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm flex-1" />
                 {!isToday && (
-                  <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setQueueDate(t); loadQueue(t) }}
+                  <button onClick={() => changeDate(todayISO)}
                     className="text-xs text-indigo-600 hover:text-indigo-800 font-bold whitespace-nowrap transition">Today</button>
                 )}
               </div>
