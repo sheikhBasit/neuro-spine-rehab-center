@@ -74,10 +74,16 @@ export default function EntryPanel() {
   const loadQueue = useCallback(async () => {
     const r = await fetch('/api/patients')
     if (r.status === 401) { router.push('/login'); return }
-    if (r.ok) setPatients(await r.json())
+    if (r.ok) {
+      const data = await r.json()
+      setPatients(data)
+      localStorage.setItem('cache_entry_queue', JSON.stringify(data))
+    }
   }, [router])
 
   useEffect(() => {
+    const cached = localStorage.getItem('cache_entry_queue')
+    if (cached) setPatients(JSON.parse(cached))
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => d && setUser(d))
     loadQueue()
     const id = setInterval(loadQueue, 3000)

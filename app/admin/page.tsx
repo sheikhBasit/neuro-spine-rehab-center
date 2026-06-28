@@ -40,18 +40,35 @@ export default function AdminPanel() {
   const loadUsers = useCallback(async () => {
     const r = await fetch('/api/users')
     if (r.status === 401) { router.push('/login'); return }
-    if (r.ok) setUsers(await r.json())
+    if (r.ok) {
+      const data = await r.json()
+      setUsers(data)
+      localStorage.setItem('cache_admin_users', JSON.stringify(data))
+    }
   }, [router])
 
   const loadReports = useCallback(async () => {
     const r = await fetch('/api/reports')
-    if (r.ok) setReports(await r.json())
+    if (r.ok) {
+      const data = await r.json()
+      setReports(data)
+      localStorage.setItem('cache_admin_reports', JSON.stringify(data))
+    }
   }, [])
 
   useEffect(() => {
+    const cachedUsers = localStorage.getItem('cache_admin_users')
+    if (cachedUsers) setUsers(JSON.parse(cachedUsers))
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => d && setAdminName(d.name))
     loadUsers()
   }, [loadUsers])
+
+  useEffect(() => {
+    if (tab === 'reports') {
+      const cachedReports = localStorage.getItem('cache_admin_reports')
+      if (cachedReports) setReports(JSON.parse(cachedReports))
+    }
+  }, [])
 
   useEffect(() => { if (tab === 'reports') loadReports() }, [tab, loadReports])
 
