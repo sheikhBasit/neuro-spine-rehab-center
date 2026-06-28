@@ -34,6 +34,7 @@ export default function AdminPanel() {
   const [tab, setTab] = useState<'dashboard' | 'users' | 'reports' | 'inventory'>('dashboard')
   const [users, setUsers] = useState<User[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0, 10))
   const [reports, setReports] = useState<ReportData | null>(null)
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [expiryAlerts, setExpiryAlerts] = useState<InventoryItem[]>([])
@@ -75,10 +76,11 @@ export default function AdminPanel() {
     }
   }, [])
 
-  const loadAttendance = useCallback(async () => {
-    const r = await fetch('/api/attendance')
+  const loadAttendance = useCallback(async (date?: string) => {
+    const d = date ?? attendanceDate
+    const r = await fetch(`/api/attendance?date=${d}`)
     if (r.ok) setAttendance(await r.json())
-  }, [])
+  }, [attendanceDate])
 
   const loadInventory = useCallback(async () => {
     const r = await fetch('/api/inventory')
@@ -247,9 +249,18 @@ export default function AdminPanel() {
 
             {/* Doctor Attendance */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-base font-bold text-slate-500 uppercase tracking-wider">Doctor Attendance — Today</h2>
-                <button onClick={loadAttendance} className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition">Refresh</button>
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+                <h2 className="text-base font-bold text-slate-500 uppercase tracking-wider">Doctor Attendance</h2>
+                <div className="flex gap-2 items-center">
+                  <input type="date" value={attendanceDate} max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => { setAttendanceDate(e.target.value); loadAttendance(e.target.value) }}
+                    className="field-input text-sm py-1.5 w-40" />
+                  {attendanceDate !== new Date().toISOString().slice(0, 10) && (
+                    <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setAttendanceDate(t); loadAttendance(t) }}
+                      className="text-xs text-indigo-600 font-bold hover:text-indigo-800 transition">Today</button>
+                  )}
+                  <button onClick={() => loadAttendance()} className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition">Refresh</button>
+                </div>
               </div>
               {attendance.length === 0 ? (
                 <div className="card p-8 text-center text-slate-400 text-sm">No doctors have started a shift today</div>

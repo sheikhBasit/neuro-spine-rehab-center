@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     const {
       name, age, gender, guardian_name, cnic_bform, phone, address, is_emergency,
       payment_method, bill_amount, discount, amount_paid, payment_status,
-      check_in_at,
+      check_in_at, bp, temperature, pulse, weight,
     } = await req.json()
 
     if (!name || !age || !phone || !address) {
@@ -54,20 +54,25 @@ export async function POST(req: Request) {
     const queue_number = parseInt(count) + 1
 
     const genderVal = gender || 'male'
+    const vitals = { bp: bp || '', temperature: temperature || '', pulse: pulse || '', weight: weight || '' }
     const [patient] = check_in_at
       ? await sql`
           INSERT INTO patients (name, age, gender, guardian_name, cnic_bform, phone, address, queue_number, is_emergency,
-                                payment_method, bill_amount, discount, amount_paid, change_due, payment_status, check_in_at)
+                                payment_method, bill_amount, discount, amount_paid, change_due, payment_status, check_in_at,
+                                bp, temperature, pulse, weight)
           VALUES (${name}, ${parseInt(age)}, ${genderVal}, ${guardian_name || ''}, ${cnic_bform || ''},
                   ${phone}, ${address}, ${queue_number}, ${!!is_emergency},
-                  ${payMethod}, ${bill}, ${disc}, ${paid}, ${change}, ${payStatus}, ${check_in_at})
+                  ${payMethod}, ${bill}, ${disc}, ${paid}, ${change}, ${payStatus}, ${check_in_at},
+                  ${vitals.bp}, ${vitals.temperature}, ${vitals.pulse}, ${vitals.weight})
           RETURNING *`
       : await sql`
           INSERT INTO patients (name, age, gender, guardian_name, cnic_bform, phone, address, queue_number, is_emergency,
-                                payment_method, bill_amount, discount, amount_paid, change_due, payment_status)
+                                payment_method, bill_amount, discount, amount_paid, change_due, payment_status,
+                                bp, temperature, pulse, weight)
           VALUES (${name}, ${parseInt(age)}, ${genderVal}, ${guardian_name || ''}, ${cnic_bform || ''},
                   ${phone}, ${address}, ${queue_number}, ${!!is_emergency},
-                  ${payMethod}, ${bill}, ${disc}, ${paid}, ${change}, ${payStatus})
+                  ${payMethod}, ${bill}, ${disc}, ${paid}, ${change}, ${payStatus},
+                  ${vitals.bp}, ${vitals.temperature}, ${vitals.pulse}, ${vitals.weight})
           RETURNING *`
 
     return NextResponse.json(patient, { status: 201 })

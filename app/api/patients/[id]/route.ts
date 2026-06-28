@@ -12,16 +12,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     const [patient] = await sql`
       SELECT p.*, u.name AS doctor_name
       FROM patients p LEFT JOIN users u ON p.seen_by_doctor_id = u.id
-      WHERE p.id = ${id}
-    `
+      WHERE p.id = ${id}`
     if (!patient) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const documents = await sql`SELECT * FROM documents WHERE patient_id = ${id} ORDER BY uploaded_at`
     const prescriptions = await sql`
-      SELECT pr.*, u.name AS doctor_name
+      SELECT pr.*, u.name AS doctor_name, u.qualification, u.speciality, u.license_no
       FROM prescriptions pr JOIN users u ON pr.doctor_id = u.id
-      WHERE pr.patient_id = ${id} ORDER BY pr.created_at
-    `
+      WHERE pr.patient_id = ${id} ORDER BY pr.created_at`
 
     return NextResponse.json({ ...patient, documents, prescriptions })
   } catch {

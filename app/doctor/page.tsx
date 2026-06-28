@@ -13,9 +13,17 @@ interface Patient {
 interface Document { id: number; url: string; file_name: string }
 interface Medicine { name: string; dosage: string; instructions: string }
 interface Prescription {
-  id: number; doctor_name: string; medicines: Medicine[] | null; image_url: string | null; notes: string; created_at: string
+  id: number; doctor_name: string; qualification: string; speciality: string; license_no: string
+  complaint: string; history: string; examination: string; diagnosis: string
+  lab_tests: string[] | null; advice: string
+  medicines: Medicine[] | null; image_url: string | null; notes: string; created_at: string
 }
-interface PatientDetail extends Patient { documents: Document[]; prescriptions: Prescription[] }
+interface PatientDetail extends Patient {
+  bp: string; temperature: string; pulse: string; weight: string
+  documents: Document[]; prescriptions: Prescription[]
+}
+
+const LAB_TESTS = ['CBC','LFT','RFT','Vitamin D3','CPK','Thyroid T3','T4','TSH','Anti-CCP','BSR','BSF','HbA1c']
 
 const S: Record<string, { bg: string; text: string; dot: string; border: string }> = {
   waiting:     { bg: 'bg-sky-50',     text: 'text-sky-700',     dot: 'bg-sky-400',     border: 'border-sky-200' },
@@ -52,13 +60,19 @@ export default function DoctorPanel() {
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
   const [selected, setSelected] = useState<PatientDetail | null>(null)
-  const [user, setUser] = useState<{ name: string; id: number } | null>(null)
+  const [user, setUser] = useState<{ name: string; id: number; qualification: string; speciality: string; license_no: string } | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [medicines, setMedicines] = useState<Medicine[]>([{ name: '', dosage: '', instructions: '' }])
   const [rxNotes, setRxNotes] = useState('')
   const [rxImage, setRxImage] = useState<File | null>(null)
   const [rxSaving, setRxSaving] = useState(false)
   const [rxTab, setRxTab] = useState<'manual' | 'photo'>('manual')
+  const [rxComplaint, setRxComplaint] = useState('')
+  const [rxHistory, setRxHistory] = useState('')
+  const [rxExamination, setRxExamination] = useState('')
+  const [rxDiagnosis, setRxDiagnosis] = useState('')
+  const [rxLabTests, setRxLabTests] = useState<string[]>([])
+  const [rxAdvice, setRxAdvice] = useState('')
   const [toast, setToast] = useState('')
   const [filter, setFilter] = useState<'all' | 'waiting' | 'in_progress' | 'done'>('all')
   const [queueDate, setQueueDate] = useState(new Date().toISOString().slice(0, 10))
@@ -145,6 +159,8 @@ export default function DoctorPanel() {
       setSelected(await r.json())
       setMedicines([{ name: '', dosage: '', instructions: '' }])
       setRxNotes(''); setRxImage(null)
+      setRxComplaint(''); setRxHistory(''); setRxExamination('')
+      setRxDiagnosis(''); setRxLabTests([]); setRxAdvice('')
     }
   }
 
@@ -171,11 +187,19 @@ export default function DoctorPanel() {
     setRxSaving(true)
     const fd = new FormData()
     fd.append('patient_id', String(selected.id))
-    fd.append('notes', rxNotes)
+    fd.append('notes',       rxNotes)
+    fd.append('complaint',   rxComplaint)
+    fd.append('history',     rxHistory)
+    fd.append('examination', rxExamination)
+    fd.append('diagnosis',   rxDiagnosis)
+    fd.append('lab_tests',   JSON.stringify(rxLabTests))
+    fd.append('advice',      rxAdvice)
     if (rxTab === 'manual') {
       const valid = medicines.filter(m => m.name.trim())
-      if (!valid.length) { notify('Add at least one medicine'); setRxSaving(false); return }
-      fd.append('medicines', JSON.stringify(valid))
+      if (!valid.length && !rxDiagnosis && !rxAdvice && rxLabTests.length === 0) {
+        notify('Fill at least one section'); setRxSaving(false); return
+      }
+      if (valid.length) fd.append('medicines', JSON.stringify(valid))
     } else if (rxImage) {
       fd.append('file', rxImage)
     } else {
@@ -186,11 +210,102 @@ export default function DoctorPanel() {
       notify('Prescription saved ✓')
       setMedicines([{ name: '', dosage: '', instructions: '' }])
       setRxNotes(''); setRxImage(null)
+      setRxComplaint(''); setRxHistory(''); setRxExamination('')
+      setRxDiagnosis(''); setRxLabTests([]); setRxAdvice('')
       await refreshSelected()
     } else {
       notify((await r.json()).error || 'Failed to save')
     }
     setRxSaving(false)
+  }
+
+  const printPrescription = (rx: Prescription) => {
+    if (!selected) return
+    const doc = window.open('', '_blank', 'width=900,height=700')
+    if (!doc) return
+    const net = Math.max(0, (selected.bill_amount || 0) - (selected.discount || 0))
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Prescription — ${selected.name}</title>
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box;}
+      body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1e293b;padding:24px;}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #3730a3;padding-bottom:12px;margin-bottom:14px;}
+      .clinic-name{font-size:22px;font-weight:800;color:#3730a3;letter-spacing:-0.5px;}
+      .doctor-block{text-align:right;}
+      .doctor-name{font-size:16px;font-weight:700;color:#1e293b;}
+      .doctor-sub{font-size:11px;color:#64748b;margin-top:2px;}
+      .patient-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#f1f5f9;border-radius:8px;padding:10px 14px;margin-bottom:14px;}
+      .pf label{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;display:block;}
+      .pf span{font-weight:600;color:#1e293b;font-size:12px;}
+      .vitals-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px;margin-bottom:14px;}
+      .vf{text-align:center;}
+      .vf label{font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;display:block;}
+      .vf span{font-weight:700;color:#3730a3;font-size:13px;}
+      .section{margin-bottom:11px;}
+      .section-title{font-size:11px;font-weight:700;color:#3730a3;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #c7d2fe;padding-bottom:3px;margin-bottom:6px;}
+      .section-body{font-size:12.5px;color:#334155;min-height:24px;white-space:pre-wrap;}
+      .tests-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;}
+      .test-item{display:flex;align-items:center;gap:6px;font-size:12px;}
+      .test-item .box{width:12px;height:12px;border:1.5px solid #6366f1;border-radius:2px;display:inline-flex;align-items:center;justify-content:center;color:#4f46e5;font-size:9px;font-weight:900;}
+      .med-table{width:100%;border-collapse:collapse;font-size:12px;}
+      .med-table th{background:#eef2ff;padding:6px 10px;text-align:left;font-size:10px;color:#4338ca;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+      .med-table td{padding:6px 10px;border-bottom:1px solid #f1f5f9;}
+      .med-table tr:last-child td{border-bottom:none;}
+      .footer{margin-top:20px;display:flex;justify-content:space-between;align-items:flex-end;border-top:1px dashed #cbd5e1;padding-top:10px;}
+      .payment-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#dcfce7;color:#166534;border:1px solid #86efac;}
+      .sig-block{text-align:right;}
+      .sig-line{width:140px;border-top:1.5px solid #1e293b;margin:40px 0 4px auto;}
+      .sig-label{font-size:10px;color:#64748b;font-weight:600;}
+      @media print{body{padding:0;} @page{size:A4;margin:18mm;}}
+    </style></head><body>
+    <div class="header">
+      <div>
+        <div class="clinic-name">Neuro Spine Rehab Center</div>
+        <div style="font-size:11px;color:#64748b;margin-top:3px;">Orthopaedics, Spine &amp; Rehabilitation</div>
+      </div>
+      <div class="doctor-block">
+        <div class="doctor-name">Dr. ${rx.doctor_name}</div>
+        ${rx.qualification ? `<div class="doctor-sub">${rx.qualification}</div>` : ''}
+        ${rx.speciality ? `<div class="doctor-sub">${rx.speciality}</div>` : ''}
+        ${rx.license_no ? `<div class="doctor-sub">Lic# ${rx.license_no}</div>` : ''}
+      </div>
+    </div>
+    <div class="patient-bar">
+      <div class="pf"><label>Patient</label><span>${selected.name}</span></div>
+      <div class="pf"><label>Age / Gender</label><span>${selected.age} yrs / ${selected.gender || 'male'}</span></div>
+      <div class="pf"><label>Date</label><span>${new Date(rx.created_at).toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'})}</span></div>
+      <div class="pf"><label>MR #</label><span>${String(selected.queue_number).padStart(3,'0')}</span></div>
+    </div>
+    ${(selected.bp || selected.temperature || selected.pulse || selected.weight) ? `
+    <div class="vitals-bar">
+      ${[['BP',selected.bp,'mmHg'],['Temp',selected.temperature,'°F'],['Pulse',selected.pulse,'bpm'],['Weight',selected.weight,'kg']].map(([l,v,u])=>`
+      <div class="vf"><label>${l}</label><span>${v||'—'} <small style="font-size:10px;font-weight:400;color:#64748b">${v?u:''}</small></span></div>`).join('')}
+    </div>` : ''}
+    ${rx.complaint ? `<div class="section"><div class="section-title">Chief Complaint</div><div class="section-body">${rx.complaint}</div></div>` : ''}
+    ${rx.history ? `<div class="section"><div class="section-title">History</div><div class="section-body">${rx.history}</div></div>` : ''}
+    ${rx.examination ? `<div class="section"><div class="section-title">Examination</div><div class="section-body">${rx.examination}</div></div>` : ''}
+    ${rx.diagnosis ? `<div class="section"><div class="section-title">Diagnosis</div><div class="section-body" style="font-weight:700;font-size:13px;">${rx.diagnosis}</div></div>` : ''}
+    ${rx.lab_tests && rx.lab_tests.length > 0 ? `
+    <div class="section"><div class="section-title">Investigation / Lab Tests</div>
+    <div class="tests-grid">${rx.lab_tests.map(t=>`<div class="test-item"><span class="box">✓</span>${t}</div>`).join('')}</div></div>` : ''}
+    ${rx.medicines && rx.medicines.length > 0 ? `
+    <div class="section"><div class="section-title">Rx — Medicines</div>
+    <table class="med-table"><thead><tr><th>#</th><th>Medicine</th><th>Dosage</th><th>Instructions</th></tr></thead><tbody>
+    ${rx.medicines.map((m,i)=>`<tr><td>${i+1}</td><td><strong>${m.name}</strong></td><td>${m.dosage||'—'}</td><td>${m.instructions||'—'}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+    ${rx.advice ? `<div class="section"><div class="section-title">Advice</div><div class="section-body">${rx.advice}</div></div>` : ''}
+    ${rx.notes ? `<div class="section"><div class="section-title">Notes</div><div class="section-body" style="color:#64748b;">${rx.notes}</div></div>` : ''}
+    <div class="footer">
+      <div>
+        ${net > 0 ? `<span class="payment-badge">Fee: PKR ${net.toLocaleString()}</span>` : ''}
+        <div style="font-size:10px;color:#94a3b8;margin-top:6px;">Printed: ${new Date().toLocaleString('en-PK')}</div>
+      </div>
+      <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Doctor's Signature</div></div>
+    </div>
+    <script>window.onload=()=>{window.print();}</script>
+    </body></html>`
+    doc.document.write(html)
+    doc.document.close()
   }
 
   const addMed = () => setMedicines(m => [...m, { name: '', dosage: '', instructions: '' }])
@@ -374,26 +489,49 @@ export default function DoctorPanel() {
                     </div>
                   )}
 
+                  {/* Vitals (from entry) */}
+                  {(selected.bp || selected.temperature || selected.pulse || selected.weight) && (
+                    <div className="card p-5">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Vitals (at entry)</p>
+                      <div className="grid grid-cols-4 gap-3 text-center">
+                        {[['BP', selected.bp, 'mmHg'], ['Temp', selected.temperature, '°F'], ['Pulse', selected.pulse, 'bpm'], ['Weight', selected.weight, 'kg']].map(([l,v,u]) => v ? (
+                          <div key={l} className="bg-indigo-50 rounded-xl py-3 px-2 border border-indigo-100">
+                            <p className="text-xs text-indigo-400 font-bold mb-1">{l}</p>
+                            <p className="font-black text-indigo-700 text-base">{v}</p>
+                            <p className="text-xs text-slate-400">{u}</p>
+                          </div>
+                        ) : null)}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Past prescriptions */}
                   {selected.prescriptions.length > 0 && (
                     <div className="card p-5">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Previous Prescriptions</p>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Previous Prescriptions ({selected.prescriptions.length})</p>
                       <div className="space-y-3">
                         {selected.prescriptions.map(rx => (
                           <div key={rx.id} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                            <p className="text-xs text-slate-400 mb-2 font-semibold">
-                              By {rx.doctor_name} · {new Date(rx.created_at).toLocaleDateString()}
-                            </p>
-                            {rx.image_url && (
-                              <a href={rx.image_url} target="_blank" rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-indigo-600 text-sm font-medium hover:underline mb-2">
-                                View Prescription Image ↗
-                              </a>
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs text-slate-400 font-semibold">
+                                Dr. {rx.doctor_name} · {new Date(rx.created_at).toLocaleDateString('en-PK', { dateStyle: 'medium' })}
+                              </p>
+                              <button onClick={() => printPrescription(rx)}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition border border-indigo-200">
+                                🖨 Print PDF
+                              </button>
+                            </div>
+                            {rx.complaint && <p className="text-xs text-slate-600 mb-1"><span className="font-bold text-slate-700">Complaint:</span> {rx.complaint}</p>}
+                            {rx.diagnosis && <p className="text-xs font-bold text-indigo-700 mb-1">Dx: {rx.diagnosis}</p>}
+                            {rx.lab_tests && rx.lab_tests.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {rx.lab_tests.map(t => <span key={t} className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">{t}</span>)}
+                              </div>
                             )}
                             {rx.medicines && rx.medicines.length > 0 && (
-                              <ul className="space-y-1.5">
+                              <ul className="space-y-1">
                                 {rx.medicines.map((m, i) => (
-                                  <li key={i} className="text-sm text-slate-700 flex gap-2">
+                                  <li key={i} className="text-xs text-slate-700 flex gap-1.5">
                                     <span className="text-indigo-400 font-bold">•</span>
                                     <span><span className="font-bold">{m.name}</span>
                                       {m.dosage && <span className="text-slate-500"> · {m.dosage}</span>}
@@ -403,66 +541,109 @@ export default function DoctorPanel() {
                                 ))}
                               </ul>
                             )}
-                            {rx.notes && <p className="text-slate-500 mt-2 text-sm italic border-t border-slate-200 pt-2">{rx.notes}</p>}
+                            {rx.advice && <p className="text-xs text-slate-500 mt-2 italic border-t border-slate-200 pt-2">Advice: {rx.advice}</p>}
+                            {rx.image_url && <a href={rx.image_url} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 font-medium hover:underline mt-1 inline-block">View Image ↗</a>}
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Add prescription */}
-                  <div className="card p-5">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Add Prescription</p>
-                    <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-4">
-                      {(['manual', 'photo'] as const).map(t => (
-                        <button key={t} onClick={() => setRxTab(t)}
-                          className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition ${rxTab === t ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}>
-                          {t === 'manual' ? '💊 Enter Medicines' : '📷 Upload Photo'}
-                        </button>
-                      ))}
+                  {/* New prescription form */}
+                  <div className="card p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">New Prescription</p>
+                      <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+                        {(['manual', 'photo'] as const).map(t => (
+                          <button key={t} onClick={() => setRxTab(t)}
+                            className={`px-3 py-1 text-xs font-bold rounded-md transition ${rxTab === t ? 'bg-white shadow text-indigo-700' : 'text-slate-500'}`}>
+                            {t === 'manual' ? '✏ Manual' : '📷 Photo'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     {rxTab === 'manual' ? (
-                      <div className="space-y-2">
-                        {medicines.map((m, i) => (
-                          <div key={i} className="grid grid-cols-12 gap-2 items-start">
-                            <input value={m.name} onChange={e => updateMed(i, 'name', e.target.value)}
-                              placeholder="Medicine name" className="col-span-5 input-sm" />
-                            <input value={m.dosage} onChange={e => updateMed(i, 'dosage', e.target.value)}
-                              placeholder="Dosage" className="col-span-3 input-sm" />
-                            <input value={m.instructions} onChange={e => updateMed(i, 'instructions', e.target.value)}
-                              placeholder="Instructions" className="col-span-3 input-sm" />
-                            {medicines.length > 1 && (
-                              <button onClick={() => removeMed(i)} className="col-span-1 text-slate-400 hover:text-red-500 transition text-lg text-center pt-1.5">✕</button>
-                            )}
+                      <>
+                        {/* Clinical sections */}
+                        {[
+                          { label: 'Chief Complaint', val: rxComplaint, set: setRxComplaint, ph: 'Main symptom or reason for visit…' },
+                          { label: 'History',         val: rxHistory,   set: setRxHistory,   ph: 'Relevant medical / family history…' },
+                          { label: 'Examination',     val: rxExamination, set: setRxExamination, ph: 'Physical examination findings…' },
+                          { label: 'Diagnosis',       val: rxDiagnosis, set: setRxDiagnosis, ph: 'Clinical diagnosis…' },
+                        ].map(s => (
+                          <div key={s.label}>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{s.label}</label>
+                            <textarea value={s.val} onChange={e => s.set(e.target.value)} placeholder={s.ph}
+                              rows={2} className="field-input resize-none text-sm" />
                           </div>
                         ))}
-                        <button onClick={addMed} className="text-sm text-indigo-600 hover:text-indigo-700 font-bold mt-1">+ Add Medicine</button>
-                      </div>
+
+                        {/* Lab tests */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Investigations / Lab Tests</label>
+                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                            {LAB_TESTS.map(t => (
+                              <label key={t} className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border-2 transition text-xs font-semibold
+                                ${rxLabTests.includes(t) ? 'border-violet-400 bg-violet-50 text-violet-700' : 'border-slate-200 text-slate-500 hover:border-violet-300'}`}>
+                                <input type="checkbox" className="sr-only" checked={rxLabTests.includes(t)}
+                                  onChange={e => setRxLabTests(prev => e.target.checked ? [...prev, t] : prev.filter(x => x !== t))} />
+                                <span className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center
+                                  ${rxLabTests.includes(t) ? 'bg-violet-500 border-violet-500 text-white' : 'border-slate-300'}`}>
+                                  {rxLabTests.includes(t) && <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+                                </span>
+                                {t}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Medicines */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Rx — Medicines</label>
+                          <div className="space-y-2">
+                            {medicines.map((m, i) => (
+                              <div key={i} className="grid grid-cols-12 gap-2 items-start">
+                                <input value={m.name} onChange={e => updateMed(i, 'name', e.target.value)}
+                                  placeholder="Medicine name" className="col-span-5 field-input text-sm py-2" />
+                                <input value={m.dosage} onChange={e => updateMed(i, 'dosage', e.target.value)}
+                                  placeholder="Dosage" className="col-span-3 field-input text-sm py-2" />
+                                <input value={m.instructions} onChange={e => updateMed(i, 'instructions', e.target.value)}
+                                  placeholder="Timing/instructions" className="col-span-3 field-input text-sm py-2" />
+                                {medicines.length > 1 && (
+                                  <button onClick={() => removeMed(i)} className="col-span-1 text-slate-400 hover:text-red-500 transition text-lg text-center pt-1.5">✕</button>
+                                )}
+                              </div>
+                            ))}
+                            <button onClick={addMed} className="text-xs text-indigo-600 hover:text-indigo-700 font-bold">+ Add Medicine</button>
+                          </div>
+                        </div>
+
+                        {/* Advice & Notes */}
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Advice</label>
+                          <textarea value={rxAdvice} onChange={e => setRxAdvice(e.target.value)}
+                            placeholder="Rest, diet, follow-up instructions…" rows={2} className="field-input resize-none text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Notes</label>
+                          <textarea value={rxNotes} onChange={e => setRxNotes(e.target.value)}
+                            placeholder="Internal notes (optional)" rows={1} className="field-input resize-none text-sm" />
+                        </div>
+                      </>
                     ) : (
-                      <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition bg-white">
-                        {rxImage ? (
-                          <p className="text-sm text-slate-600 font-medium">{rxImage.name}</p>
-                        ) : (
-                          <>
-                            <svg className="w-7 h-7 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span className="text-sm text-slate-500 font-medium">Upload prescription photo</span>
-                          </>
+                      <label className="flex flex-col items-center justify-center h-28 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition bg-white">
+                        {rxImage ? <p className="text-sm text-slate-600 font-medium">{rxImage.name}</p> : (
+                          <><svg className="w-6 h-6 text-slate-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          <span className="text-sm text-slate-500 font-medium">Upload prescription photo</span></>
                         )}
-                        <input type="file" accept="image/*" className="hidden"
-                          onChange={e => setRxImage(e.target.files?.[0] || null)} />
+                        <input type="file" accept="image/*" className="hidden" onChange={e => setRxImage(e.target.files?.[0] || null)} />
                       </label>
                     )}
 
-                    <textarea value={rxNotes} onChange={e => setRxNotes(e.target.value)}
-                      placeholder="Additional notes (optional)" rows={2}
-                      className="field-input mt-4 resize-none" />
-
                     <button onClick={savePrescription} disabled={rxSaving}
-                      className="btn-primary w-full mt-4 py-3.5 text-base">
-                      {rxSaving ? 'Saving…' : 'Save Prescription'}
+                      className="btn-primary w-full py-3.5 text-base">
+                      {rxSaving ? 'Saving…' : '💾 Save Prescription'}
                     </button>
                   </div>
                 </div>

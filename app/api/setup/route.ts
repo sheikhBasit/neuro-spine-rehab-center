@@ -119,6 +119,18 @@ export async function GET(req: Request) {
     log.push('✓ payment columns on patients')
     await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'male'`
     log.push('✓ gender column on patients')
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS bp          TEXT DEFAULT ''`
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS temperature TEXT DEFAULT ''`
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS pulse       TEXT DEFAULT ''`
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS weight      TEXT DEFAULT ''`
+    log.push('✓ vitals columns on patients')
+    await sql`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS complaint   TEXT DEFAULT ''`
+    await sql`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS history     TEXT DEFAULT ''`
+    await sql`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS examination TEXT DEFAULT ''`
+    await sql`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS diagnosis   TEXT DEFAULT ''`
+    await sql`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS lab_tests   JSONB DEFAULT '[]'::jsonb`
+    await sql`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS advice      TEXT DEFAULT ''`
+    log.push('✓ prescription detail columns')
 
     const adminEmail = 'admin@admin.com'
     const adminPassword = 'admin123'

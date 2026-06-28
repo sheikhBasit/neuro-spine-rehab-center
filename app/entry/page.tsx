@@ -30,6 +30,7 @@ const dateLabel = (d: string) => new Date(d).toLocaleDateString('en-PK', { weekd
 const blank = {
   name: '', age: '', gender: 'male', guardian_name: '', cnic_bform: '', phone: '', address: '',
   is_emergency: false,
+  bp: '', temperature: '', pulse: '', weight: '',
   payment_method: 'cash', bill_amount: '', discount: '', amount_paid: '',
   check_in_at: '',
 }
@@ -242,6 +243,28 @@ export default function EntryPanel() {
                     <textarea value={form.address} onChange={set('address')} required rows={2}
                       className="field-input resize-none" placeholder="Street, City, District" />
                   </div>
+                </div>
+              </div>
+
+              {/* Vitals */}
+              <div className="card p-5">
+                <p className="text-sm font-bold text-slate-700 mb-3">Vitals <span className="text-xs font-normal text-slate-400 ml-1">(optional)</span></p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { key: 'bp',          label: 'BP',           placeholder: 'e.g. 120/80',  unit: 'mmHg' },
+                    { key: 'temperature', label: 'Temperature',  placeholder: 'e.g. 98.6',    unit: '°F' },
+                    { key: 'pulse',       label: 'Pulse',        placeholder: 'e.g. 72',      unit: 'bpm' },
+                    { key: 'weight',      label: 'Weight',       placeholder: 'e.g. 65',      unit: 'kg' },
+                  ].map(v => (
+                    <div key={v.key}>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{v.label}</label>
+                      <div className="relative">
+                        <input value={(form as unknown as Record<string,string>)[v.key]} onChange={set(v.key)}
+                          placeholder={v.placeholder} className="field-input pr-10 text-sm" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium">{v.unit}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
