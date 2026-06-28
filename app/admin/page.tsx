@@ -15,6 +15,7 @@ interface ReportData {
 }
 interface AttendanceRecord { id: number; doctor_name: string; speciality: string; shift_start: string; shift_end: string | null; total_minutes: number | null; breaks: { start: string; end: string | null }[] }
 interface InventoryItem { id: number; name: string; type: 'consumable' | 'permanent'; category: string; quantity: number; unit: string; expiry_date: string | null; status: string | null; notes: string; days_left: number | null; created_at: string }
+interface PaymentRecord { id: number; name: string; queue_number: number; check_in_at: string; payment_method: string; bill_amount: number; discount: number; amount_paid: number; change_due: number; payment_status: string }
 
 const blankDoctor = { role: 'doctor', name: '', email: '', password: '', phone: '', cnic: '', license_no: '', speciality: '', qualification: '' }
 const blankStaff  = { role: 'data_entry', name: '', email: '', password: '', phone: '' }
@@ -42,6 +43,11 @@ export default function AdminPanel() {
   const [itemForm, setItemForm] = useState<Record<string, string>>(blankItem)
   const [savingItem, setSavingItem] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [payments, setPayments] = useState<PaymentRecord[]>([])
+  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10))
+  const [editingPayment, setEditingPayment] = useState<PaymentRecord | null>(null)
+  const [discountEdit, setDiscountEdit] = useState('')
+  const [savingDiscount, setSavingDiscount] = useState(false)
   const [showModal, setShowModal] = useState<'doctor' | 'staff' | null>(null)
   const [form, setForm] = useState<Record<string, string>>(blankDoctor)
   const [saving, setSaving] = useState(false)
@@ -84,6 +90,12 @@ export default function AdminPanel() {
     if (r.ok) setExpiryAlerts(await r.json())
   }, [])
 
+  const loadPayments = useCallback(async (date?: string) => {
+    const d = date ?? payDate
+    const r = await fetch(`/api/patients?date=${d}`)
+    if (r.ok) setPayments(await r.json())
+  }, [payDate])
+
   useEffect(() => {
     const cachedUsers = localStorage.getItem('cache_admin_users')
     if (cachedUsers) setUsers(JSON.parse(cachedUsers))
@@ -92,7 +104,8 @@ export default function AdminPanel() {
     loadReports()
     loadAttendance()
     loadExpiryAlerts()
-  }, [loadUsers, loadReports, loadAttendance, loadExpiryAlerts])
+    loadPayments()
+  }, [loadUsers, loadReports, loadAttendance, loadExpiryAlerts, loadPayments])
 
   useEffect(() => {
     if (tab === 'reports') {
@@ -296,12 +309,100 @@ export default function AdminPanel() {
               )}
             </div>
 
+            {/* Payments */}
+            <div>
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+                <h2 className="text-base font-bold text-slate-500 uppercase tracking-wider">Payments</h2>
+                <div className="flex gap-2 items-center">
+                  <input type="date" value={payDate} max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => { setPayDate(e.target.value); loadPayments(e.target.value) }}
+                    className="field-input text-sm py-1.5 w-44" />
+                  {payDate !== new Date().toISOString().slice(0, 10) && (
+                    <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setPayDate(t); loadPayments(t) }}
+                      className="text-xs text-indigo-600 font-bold hover:text-indigo-800 transition">Today</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Revenue summary */}
+              {payments.length > 0 && (() => {
+                const totalBill   = payments.reduce((s, p) => s + Number(p.bill_amount || 0), 0)
+                const totalDisc   = payments.reduce((s, p) => s + Number(p.discount || 0), 0)
+                const totalPaid   = payments.reduce((s, p) => s + Number(p.amount_paid || 0), 0)
+                const paidCount   = payments.filter(p => p.payment_status === 'paid').length
+                const pendingCount = payments.filter(p => p.payment_status === 'pending').length
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                    {[
+                      { l: 'Total Billed', v: `PKR ${totalBill.toLocaleString()}`, c: 'text-indigo-700', bg: 'bg-indigo-50' },
+                      { l: 'Discounts', v: `PKR ${totalDisc.toLocaleString()}`, c: 'text-amber-700', bg: 'bg-amber-50' },
+                      { l: 'Collected', v: `PKR ${totalPaid.toLocaleString()}`, c: 'text-emerald-700', bg: 'bg-emerald-50' },
+                      { l: 'Pending', v: `${pendingCount} of ${payments.length}`, c: 'text-red-600', bg: 'bg-red-50' },
+                    ].map(s => (
+                      <div key={s.l} className={`${s.bg} rounded-xl p-4 border border-white/60`}>
+                        <p className="text-xs font-semibold text-slate-500 mb-1">{s.l}</p>
+                        <p className={`text-xl font-black ${s.c}`}>{s.v}</p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
+              <div className="card overflow-hidden">
+                {payments.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-sm">No patients for this date</div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        {['#', 'Patient', 'Method', 'Bill', 'Discount', 'Net', 'Received', 'Status', ''].map(h => (
+                          <th key={h} className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-left whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payments.map((p, i) => {
+                        const net = Math.max(0, (p.bill_amount || 0) - (p.discount || 0))
+                        return (
+                          <motion.tr key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                            className="border-t border-slate-100 hover:bg-slate-50/60 transition">
+                            <td className="px-4 py-3 font-black text-slate-600">#{String(p.queue_number).padStart(3, '0')}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-800">{p.name}</td>
+                            <td className="px-4 py-3 text-xs font-bold text-slate-500 uppercase">{p.payment_method || 'cash'}</td>
+                            <td className="px-4 py-3">{p.bill_amount > 0 ? `PKR ${Number(p.bill_amount).toLocaleString()}` : '—'}</td>
+                            <td className="px-4 py-3 text-amber-600 font-semibold">{p.discount > 0 ? `PKR ${Number(p.discount).toLocaleString()}` : '—'}</td>
+                            <td className="px-4 py-3 font-bold text-indigo-700">{net > 0 ? `PKR ${net.toLocaleString()}` : '—'}</td>
+                            <td className="px-4 py-3">{p.amount_paid > 0 ? `PKR ${Number(p.amount_paid).toLocaleString()}` : '—'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 rounded-full text-xs font-bold border
+                                ${p.payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                : p.payment_status === 'partial' ? 'bg-amber-100 text-amber-700 border-amber-200'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                {p.payment_status === 'paid' ? '✓ Paid' : p.payment_status === 'partial' ? 'Partial' : 'Pending'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <button onClick={() => { setEditingPayment(p); setDiscountEdit(String(p.discount || 0)) }}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition">
+                                Edit
+                              </button>
+                            </td>
+                          </motion.tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
             {/* Quick links */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               {[
                 { label: 'Manage Users', desc: 'Add doctors and staff accounts', icon: '👥', action: () => setTab('users'), color: 'from-indigo-500 to-indigo-600' },
                 { label: 'View Reports', desc: 'Charts and statistics', icon: '📊', action: () => setTab('reports'), color: 'from-sky-500 to-sky-600' },
-                { label: 'Export Excel', desc: 'Download today\'s patient data', icon: '↓', action: () => window.open('/api/export'), color: 'from-emerald-500 to-emerald-600' },
+                { label: 'Inventory', desc: 'Manage consumables & equipment', icon: '📦', action: () => setTab('inventory'), color: 'from-violet-500 to-violet-600' },
+                { label: 'Export Excel', desc: "Download today's patient data", icon: '↓', action: () => window.open('/api/export'), color: 'from-emerald-500 to-emerald-600' },
               ].map(c => (
                 <button key={c.label} onClick={c.action}
                   className={`bg-gradient-to-br ${c.color} text-white rounded-2xl p-5 text-left hover:shadow-lg transition-all hover:-translate-y-0.5 shadow-md`}
@@ -314,6 +415,65 @@ export default function AdminPanel() {
             </div>
           </motion.div>
         )}
+
+        {/* Edit Payment Modal */}
+        <AnimatePresence>
+          {editingPayment && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden">
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-lg">Edit Payment</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">#{String(editingPayment.queue_number).padStart(3,'0')} · {editingPayment.name}</p>
+                  </div>
+                  <button onClick={() => setEditingPayment(null)} className="text-slate-400 hover:text-slate-700 p-2 rounded-xl hover:bg-slate-100 transition">✕</button>
+                </div>
+                <div className="p-6 space-y-5">
+                  <div className="grid grid-cols-2 gap-4 text-sm bg-slate-50 rounded-xl p-4">
+                    {[
+                      ['Bill Amount', `PKR ${Number(editingPayment.bill_amount || 0).toLocaleString()}`],
+                      ['Current Discount', `PKR ${Number(editingPayment.discount || 0).toLocaleString()}`],
+                      ['Net Payable', `PKR ${Math.max(0, (editingPayment.bill_amount || 0) - (editingPayment.discount || 0)).toLocaleString()}`],
+                      ['Received', `PKR ${Number(editingPayment.amount_paid || 0).toLocaleString()}`],
+                    ].map(([k, v]) => (
+                      <div key={k}>
+                        <p className="text-xs text-slate-400 font-semibold">{k}</p>
+                        <p className="font-bold text-slate-700">{v}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-1.5">New Discount (PKR)</label>
+                    <input type="number" min={0} max={editingPayment.bill_amount || 99999}
+                      value={discountEdit} onChange={e => setDiscountEdit(e.target.value)}
+                      className="field-input text-lg font-bold" />
+                    {discountEdit && (
+                      <p className="text-xs text-indigo-600 font-semibold mt-1.5">
+                        Net after discount: PKR {Math.max(0, (editingPayment.bill_amount || 0) - parseFloat(discountEdit || '0')).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => setEditingPayment(null)} className="btn-secondary flex-1 py-3 text-sm">Cancel</button>
+                    <button disabled={savingDiscount} onClick={async () => {
+                      setSavingDiscount(true)
+                      const r = await fetch(`/api/patients/${editingPayment.id}/payment`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ discount: parseFloat(discountEdit) || 0 })
+                      })
+                      if (r.ok) { notify('Discount updated ✓'); setEditingPayment(null); await loadPayments() }
+                      else notify('Failed to update')
+                      setSavingDiscount(false)
+                    }} className="btn-primary flex-1 py-3 text-sm">
+                      {savingDiscount ? 'Saving…' : 'Apply Discount'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Users tab */}
         {tab === 'users' && (

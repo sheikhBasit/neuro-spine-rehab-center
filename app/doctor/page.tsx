@@ -4,9 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 
 interface Patient {
-  id: number; name: string; age: number; queue_number: number; is_emergency: boolean
+  id: number; name: string; age: number; gender: string; queue_number: number; is_emergency: boolean
   status: string; check_in_at: string; guardian_name: string; cnic_bform: string
   phone: string; address: string; doctor_name?: string
+  payment_method: string; bill_amount: number; discount: number
+  amount_paid: number; change_due: number; payment_status: string
 }
 interface Document { id: number; url: string; file_name: string }
 interface Medicine { name: string; dosage: string; instructions: string }
@@ -59,6 +61,7 @@ export default function DoctorPanel() {
   const [rxTab, setRxTab] = useState<'manual' | 'photo'>('manual')
   const [toast, setToast] = useState('')
   const [filter, setFilter] = useState<'all' | 'waiting' | 'in_progress' | 'done'>('all')
+  const [queueDate, setQueueDate] = useState(new Date().toISOString().slice(0, 10))
   const [shift, setShift] = useState<ShiftState>({ status: 'idle' })
   const [elapsed, setElapsed] = useState(0)
 
@@ -115,15 +118,17 @@ export default function DoctorPanel() {
     saveShift({ status: 'idle' }); setElapsed(0); notify('Shift ended')
   }
 
-  const loadQueue = useCallback(async () => {
-    const r = await fetch('/api/patients')
+  const loadQueue = useCallback(async (date?: string) => {
+    const d = date ?? queueDate
+    const r = await fetch(`/api/patients?date=${d}`)
     if (r.status === 401) { router.push('/login'); return }
     if (r.ok) {
       const data = await r.json()
       setPatients(data)
-      localStorage.setItem('cache_doctor_queue', JSON.stringify(data))
+      if (d === new Date().toISOString().slice(0, 10))
+        localStorage.setItem('cache_doctor_queue', JSON.stringify(data))
     }
-  }, [router])
+  }, [router, queueDate])
 
   useEffect(() => {
     const cached = localStorage.getItem('cache_doctor_queue')
@@ -256,7 +261,7 @@ export default function DoctorPanel() {
                       <Badge status={selected.status} emergency={selected.is_emergency} />
                     </div>
                     <p className="font-bold text-slate-800 text-xl">{selected.name}
-                      <span className="text-slate-400 font-normal text-base ml-2">· {selected.age} yrs</span>
+                      <span className="text-slate-400 font-normal text-base ml-2">· {selected.age} yrs · {selected.gender || 'male'}</span>
                     </p>
                     {selected.doctor_name && <p className="text-sm text-slate-500 mt-0.5">Being seen by {selected.doctor_name}</p>}
                   </div>
@@ -277,7 +282,7 @@ export default function DoctorPanel() {
                         ['Guardian', selected.guardian_name || '—'],
                         ['CNIC / B-Form', selected.cnic_bform || '—'],
                         ['Phone', selected.phone],
-                        ['Check-in', new Date(selected.check_in_at).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })],
+                        ['Check-in', new Date(selected.check_in_at).toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' })],
                         ['Status', selected.status.replace('_', ' ')],
                       ].map(([k, v]) => (
                         <div key={k}>
@@ -316,6 +321,39 @@ export default function DoctorPanel() {
                       )}
                     </div>
                   </div>
+
+                  {/* Payment info */}
+                  {(selected.bill_amount > 0 || selected.payment_method) && (
+                    <div className="card p-5">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Payment</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                        {([
+                          ['Method', selected.payment_method?.toUpperCase() || '—'],
+                          ['Bill', `PKR ${Number(selected.bill_amount || 0).toLocaleString()}`],
+                          ['Discount', `PKR ${Number(selected.discount || 0).toLocaleString()}`],
+                          ['Net Bill', `PKR ${Math.max(0, (selected.bill_amount || 0) - (selected.discount || 0)).toLocaleString()}`],
+                          ...(selected.payment_method === 'cash' ? [
+                            ['Received', `PKR ${Number(selected.amount_paid || 0).toLocaleString()}`],
+                            ['Change', `PKR ${Number(selected.change_due || 0).toLocaleString()}`],
+                          ] : []),
+                        ] as [string, string][]).map(([k, v]) => (
+                          <div key={k}>
+                            <p className="text-xs text-slate-400 font-semibold mb-0.5">{k}</p>
+                            <p className="font-bold text-slate-700">{v}</p>
+                          </div>
+                        ))}
+                        <div>
+                          <p className="text-xs text-slate-400 font-semibold mb-0.5">Status</p>
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold border inline-block
+                            ${selected.payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                            : selected.payment_status === 'partial' ? 'bg-amber-100 text-amber-700 border-amber-200'
+                            : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                            {selected.payment_status === 'paid' ? '✓ Paid' : selected.payment_status === 'partial' ? 'Partial' : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Documents */}
                   {selected.documents.length > 0 && (
@@ -456,10 +494,21 @@ export default function DoctorPanel() {
             {/* Queue header */}
             <div className="px-5 py-4 border-b border-slate-100">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-base font-bold text-slate-800">Live Queue</h2>
+                <h2 className="text-base font-bold text-slate-800">Queue</h2>
                 <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-bold">
-                  <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />Live
+                  <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                  {queueDate === new Date().toISOString().slice(0, 10) ? 'Live' : queueDate}
                 </span>
+              </div>
+              {/* Date picker */}
+              <div className="flex gap-2 items-center mb-3">
+                <input type="date" value={queueDate} max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => { setQueueDate(e.target.value); loadQueue(e.target.value); setSelected(null) }}
+                  className="field-input flex-1 text-xs py-1.5" />
+                {queueDate !== new Date().toISOString().slice(0, 10) && (
+                  <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setQueueDate(t); loadQueue(t) }}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-bold whitespace-nowrap transition">Today</button>
+                )}
               </div>
               <div className="flex gap-2 mb-3">
                 {[

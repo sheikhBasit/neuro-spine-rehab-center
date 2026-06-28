@@ -109,6 +109,17 @@ export async function GET(req: Request) {
     `
     log.push('✓ inventory_items table')
 
+    // Payment columns (idempotent — IF NOT EXISTS per column)
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'cash'`
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS bill_amount NUMERIC(10,2) DEFAULT 0`
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS discount    NUMERIC(10,2) DEFAULT 0`
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS amount_paid NUMERIC(10,2) DEFAULT 0`
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS change_due  NUMERIC(10,2) DEFAULT 0`
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pending'`
+    log.push('✓ payment columns on patients')
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'male'`
+    log.push('✓ gender column on patients')
+
     const adminEmail = 'admin@admin.com'
     const adminPassword = 'admin123'
     const [existing] = await sql`SELECT id FROM users WHERE email = ${adminEmail} LIMIT 1`
