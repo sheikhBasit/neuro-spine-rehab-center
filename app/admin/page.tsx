@@ -152,6 +152,20 @@ export default function AdminPanel() {
     await loadUsers()
   }
 
+  const deleteUser = async (user: User) => {
+    if (!confirm(`Delete ${user.name}? This cannot be undone.`)) return
+    const r = await fetch(`/api/users/${user.id}`, { method: 'DELETE' })
+    if (r.ok) { notify(`${user.name} deleted`); await loadUsers() }
+    else notify('Failed to delete user')
+  }
+
+  const deletePatient = async (id: number, name: string) => {
+    if (!confirm(`Delete patient ${name}? This cannot be undone.`)) return
+    const r = await fetch(`/api/patients/${id}`, { method: 'DELETE' })
+    if (r.ok) { notify(`${name} deleted`); await loadPayments(payDate) }
+    else notify('Failed to delete patient')
+  }
+
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login') }
 
   const stats = [
@@ -397,10 +411,16 @@ export default function AdminPanel() {
                               </span>
                             </td>
                             <td className="px-4 py-3">
-                              <button onClick={() => { setEditingPayment(p); setDiscountEdit(String(p.discount || 0)) }}
-                                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition">
-                                Edit
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => { setEditingPayment(p); setDiscountEdit(String(p.discount || 0)) }}
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition">
+                                  Edit
+                                </button>
+                                <button onClick={() => deletePatient(p.id, p.name)}
+                                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition">
+                                  Delete
+                                </button>
+                              </div>
                             </td>
                           </motion.tr>
                         )
@@ -549,12 +569,18 @@ export default function AdminPanel() {
                         </td>
                         <td className="px-5 py-4">
                           {u.role !== 'admin' && (
-                            <button onClick={() => toggleActive(u)}
-                              className={`text-xs font-semibold px-3.5 py-1.5 rounded-lg transition border ${u.active
-                                ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}>
-                              {u.active ? 'Deactivate' : 'Activate'}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => toggleActive(u)}
+                                className={`text-xs font-semibold px-3.5 py-1.5 rounded-lg transition border ${u.active
+                                  ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}>
+                                {u.active ? 'Deactivate' : 'Activate'}
+                              </button>
+                              <button onClick={() => deleteUser(u)}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition">
+                                Delete
+                              </button>
+                            </div>
                           )}
                         </td>
                       </motion.tr>
