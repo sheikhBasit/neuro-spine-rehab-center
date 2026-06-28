@@ -65,6 +65,9 @@ export default function AdminPanel() {
   const [editingPatient, setEditingPatient] = useState<PaymentRecord | null>(null)
   const [patientForm, setPatientForm] = useState<Partial<PaymentRecord>>({})
   const [savingPatient, setSavingPatient] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [userForm, setUserForm] = useState<Partial<User & { password: string }>>({})
+  const [savingUser, setSavingUser] = useState(false)
   const [showModal, setShowModal] = useState<'doctor' | 'staff' | null>(null)
   const [form, setForm] = useState<Record<string, string>>(blankDoctor)
   const [saving, setSaving] = useState(false)
@@ -743,6 +746,10 @@ export default function AdminPanel() {
                         <td className="px-5 py-4">
                           {u.role !== 'admin' && (
                             <div className="flex items-center gap-2">
+                              <button onClick={() => { setEditingUser(u); setUserForm({ ...u, password: '' }) }}
+                                className="text-xs font-semibold px-3.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition border border-indigo-200">
+                                Edit
+                              </button>
                               <button onClick={() => toggleActive(u)}
                                 className={`text-xs font-semibold px-3.5 py-1.5 rounded-lg transition border ${u.active
                                   ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
@@ -1214,6 +1221,83 @@ export default function AdminPanel() {
             )}
           </motion.div>
         )}
+
+      {/* Edit User Modal */}
+      <AnimatePresence>
+        {editingUser && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-lg border border-slate-100 my-4">
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-lg">Edit {editingUser.role === 'doctor' ? 'Doctor' : 'Staff'}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">{editingUser.name} · {editingUser.email}</p>
+                </div>
+                <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-slate-700 p-2 rounded-xl hover:bg-slate-100 transition text-xl">✕</button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Full Name <span className="text-red-500">*</span></label>
+                    <input value={userForm.name || ''} onChange={e => setUserForm(f => ({ ...f, name: e.target.value }))} className="field-input text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Email <span className="text-red-500">*</span></label>
+                    <input type="email" value={userForm.email || ''} onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))} className="field-input text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Phone</label>
+                    <input value={userForm.phone || ''} onChange={e => setUserForm(f => ({ ...f, phone: e.target.value }))} className="field-input text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">CNIC</label>
+                    <input value={userForm.cnic || ''} onChange={e => setUserForm(f => ({ ...f, cnic: e.target.value }))} className="field-input text-sm" />
+                  </div>
+                  {editingUser.role === 'doctor' && (<>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Speciality</label>
+                      <input value={userForm.speciality || ''} onChange={e => setUserForm(f => ({ ...f, speciality: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Qualification</label>
+                      <input value={userForm.qualification || ''} onChange={e => setUserForm(f => ({ ...f, qualification: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">License No.</label>
+                      <input value={userForm.license_no || ''} onChange={e => setUserForm(f => ({ ...f, license_no: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                  </>)}
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">New Password <span className="font-normal text-slate-400">(leave blank to keep current)</span></label>
+                    <input type="password" value={userForm.password || ''} onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="field-input text-sm" />
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button onClick={() => setEditingUser(null)} className="btn-secondary flex-1 py-3 text-sm">Cancel</button>
+                  <button disabled={savingUser} onClick={async () => {
+                    if (!userForm.name || !userForm.email) { notify('Name and email are required'); return }
+                    setSavingUser(true)
+                    const body: Record<string, string> = {
+                      name: userForm.name, email: userForm.email, phone: userForm.phone || '',
+                      cnic: userForm.cnic || '', speciality: userForm.speciality || '',
+                      qualification: userForm.qualification || '', license_no: userForm.license_no || '',
+                    }
+                    if (userForm.password) body.password = userForm.password
+                    const r = await fetch(`/api/users/${editingUser.id}`, {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                    })
+                    if (r.ok) { notify('Account updated ✓'); setEditingUser(null); await loadUsers() }
+                    else notify((await r.json()).error || 'Failed to update')
+                    setSavingUser(false)
+                  }} className="btn-primary flex-1 py-3 text-sm">
+                    {savingUser ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Add User Modal */}
       <AnimatePresence>

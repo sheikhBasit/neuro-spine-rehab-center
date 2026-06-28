@@ -7,12 +7,34 @@ export const dynamic = 'force-dynamic'
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     await requireRole(['admin'])
-    const { active } = await req.json()
-    const [user] = await sql`
-      UPDATE users SET active = ${active} WHERE id = ${parseInt(params.id)}
-      RETURNING id, name, active
-    `
-    return NextResponse.json(user)
+    const body = await req.json()
+    const id = parseInt(params.id)
+
+    // Toggle-active shortcut (existing behaviour)
+    if (Object.keys(body).length === 1 && 'active' in body) {
+      const [user] = await sql`UPDATE users SET active = ${body.active} WHERE id = ${id} RETURNING id, name, active`
+      return NextResponse.json(user)
+    }
+
+    const { name, email, phone, cnic, speciality, qualification, license_no, password } = body
+    if (!name || !email) return NextResponse.json({ error: 'Name and email required' }, { status: 400 })
+
+    if (password) {
+      const { bcrypt } = await import('@/lib/auth')
+      const hash = await bcrypt.hash(password, 12)
+      const [u] = await sql`
+        UPDATE users SET name=${name}, email=${email}, phone=${phone||''}, cnic=${cnic||''},
+          speciality=${speciality||''}, qualification=${qualification||''}, license_no=${license_no||''},
+          password_hash=${hash}
+        WHERE id=${id} AND role != 'admin' RETURNING id, role, name, email, phone, cnic, speciality, qualification, license_no, active`
+      return NextResponse.json(u)
+    }
+
+    const [u] = await sql`
+      UPDATE users SET name=${name}, email=${email}, phone=${phone||''}, cnic=${cnic||''},
+        speciality=${speciality||''}, qualification=${qualification||''}, license_no=${license_no||''}
+      WHERE id=${id} AND role != 'admin' RETURNING id, role, name, email, phone, cnic, speciality, qualification, license_no, active`
+    return NextResponse.json(u)
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
