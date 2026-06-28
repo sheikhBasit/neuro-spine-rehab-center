@@ -10,7 +10,7 @@ interface Patient {
   payment_method: string; bill_amount: number; discount: number
   amount_paid: number; change_due: number; payment_status: string
 }
-interface Document { id: number; url: string; file_name: string }
+interface Document { id: number; url: string; file_name: string; uploaded_at: string; visit_date?: string; queue_number?: number }
 interface Medicine { name: string; dosage: string; instructions: string }
 interface Prescription {
   id: number; doctor_name: string; qualification: string; speciality: string; license_no: string
@@ -20,7 +20,7 @@ interface Prescription {
 }
 interface PatientDetail extends Patient {
   bp: string; temperature: string; pulse: string; weight: string
-  documents: Document[]; prescriptions: Prescription[]
+  documents: Document[]; previousDocuments: Document[]; prescriptions: Prescription[]
 }
 
 const LAB_TESTS = ['CBC','LFT','RFT','Vitamin D3','CPK','Thyroid T3','T4','TSH','Anti-CCP','BSR','BSF','HbA1c']
@@ -499,19 +499,55 @@ export default function DoctorPanel() {
                     </div>
                   )}
 
-                  {/* Documents */}
+                  {/* Current visit documents */}
                   {selected.documents.length > 0 && (
                     <div className="card p-5">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Documents ({selected.documents.length})</p>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                        Documents — This Visit ({selected.documents.length})
+                      </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {selected.documents.map(d => (
                           <a key={d.id} href={d.url} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-2.5 text-sm text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-4 py-3 rounded-xl transition hover:bg-indigo-100 border border-indigo-100">
+                            className="flex items-center gap-2.5 text-sm text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-4 py-3 rounded-xl transition hover:bg-indigo-100 border border-indigo-100 group">
                             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                             </svg>
-                            <span className="font-medium truncate">{d.file_name}</span>
-                            <span className="ml-auto text-xs text-indigo-400 shrink-0">View ↗</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{d.file_name}</p>
+                              <p className="text-xs text-indigo-400">
+                                {new Date(d.uploaded_at).toLocaleString('en-PK', { dateStyle: 'medium', timeStyle: 'short' })}
+                              </p>
+                            </div>
+                            <span className="ml-auto text-xs text-indigo-400 shrink-0 group-hover:text-indigo-600">View ↗</span>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Previous-visit documents (same phone, last 6 months) */}
+                  {selected.previousDocuments?.length > 0 && (
+                    <div className="card p-5 border-amber-100 bg-amber-50/30">
+                      <div className="flex items-center gap-2 mb-3">
+                        <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">
+                          Previous Visit Documents ({selected.previousDocuments.length})
+                        </p>
+                        <span className="text-xs text-amber-500 font-medium">· last 6 months</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {selected.previousDocuments.map(d => (
+                          <a key={d.id} href={d.url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-2.5 text-sm text-amber-700 hover:text-amber-900 bg-white px-4 py-3 rounded-xl transition hover:bg-amber-50 border border-amber-200 group">
+                            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                            </svg>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{d.file_name}</p>
+                              <p className="text-xs text-amber-500">
+                                Visit #{String(d.queue_number).padStart(3,'0')} · {new Date(d.visit_date!).toLocaleDateString('en-PK', { dateStyle: 'medium' })}
+                              </p>
+                            </div>
+                            <span className="ml-auto text-xs text-amber-400 shrink-0 group-hover:text-amber-700">View ↗</span>
                           </a>
                         ))}
                       </div>

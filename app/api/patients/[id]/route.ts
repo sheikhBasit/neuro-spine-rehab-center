@@ -16,12 +16,25 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     if (!patient) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const documents = await sql`SELECT * FROM documents WHERE patient_id = ${id} ORDER BY uploaded_at`
+
+    // Previous-visit documents: same phone, different visit, uploaded in last 6 months
+    const previousDocuments = await sql`
+      SELECT d.*, p.check_in_at AS visit_date, p.queue_number
+      FROM documents d
+      JOIN patients p ON d.patient_id = p.id
+      WHERE p.phone = ${patient.phone}
+        AND p.id != ${id}
+        AND d.uploaded_at >= NOW() - INTERVAL '6 months'
+      ORDER BY d.uploaded_at DESC
+      LIMIT 50
+    `
+
     const prescriptions = await sql`
       SELECT pr.*, u.name AS doctor_name, u.qualification, u.speciality, u.license_no
       FROM prescriptions pr JOIN users u ON pr.doctor_id = u.id
       WHERE pr.patient_id = ${id} ORDER BY pr.created_at`
 
-    return NextResponse.json({ ...patient, documents, prescriptions })
+    return NextResponse.json({ ...patient, documents, previousDocuments, prescriptions })
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
