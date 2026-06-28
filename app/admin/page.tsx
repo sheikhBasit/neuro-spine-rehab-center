@@ -15,7 +15,7 @@ interface ReportData {
 }
 interface AttendanceRecord { id: number; doctor_name: string; speciality: string; shift_start: string; shift_end: string | null; total_minutes: number | null; breaks: { start: string; end: string | null }[] }
 interface InventoryItem { id: number; name: string; type: 'consumable' | 'permanent'; category: string; quantity: number; unit: string; expiry_date: string | null; status: string | null; notes: string; days_left: number | null; created_at: string }
-interface PaymentRecord { id: number; name: string; queue_number: number; check_in_at: string; payment_method: string; bill_amount: number; discount: number; amount_paid: number; change_due: number; payment_status: string }
+interface PaymentRecord { id: number; name: string; age: number; gender: string; queue_number: number; check_in_at: string; guardian_name: string; cnic_bform: string; phone: string; address: string; is_emergency: boolean; bp: string; temperature: string; pulse: string; weight: string; payment_method: string; bill_amount: number; discount: number; amount_paid: number; change_due: number; payment_status: string }
 
 const blankDoctor = { role: 'doctor', name: '', email: '', password: '', phone: '', cnic: '', license_no: '', speciality: '', qualification: '' }
 const blankStaff  = { role: 'data_entry', name: '', email: '', password: '', phone: '' }
@@ -51,6 +51,9 @@ export default function AdminPanel() {
   const [editingPayment, setEditingPayment] = useState<PaymentRecord | null>(null)
   const [discountEdit, setDiscountEdit] = useState('')
   const [savingDiscount, setSavingDiscount] = useState(false)
+  const [editingPatient, setEditingPatient] = useState<PaymentRecord | null>(null)
+  const [patientForm, setPatientForm] = useState<Partial<PaymentRecord>>({})
+  const [savingPatient, setSavingPatient] = useState(false)
   const [showModal, setShowModal] = useState<'doctor' | 'staff' | null>(null)
   const [form, setForm] = useState<Record<string, string>>(blankDoctor)
   const [saving, setSaving] = useState(false)
@@ -412,9 +415,13 @@ export default function AdminPanel() {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
-                                <button onClick={() => { setEditingPayment(p); setDiscountEdit(String(p.discount || 0)) }}
+                                <button onClick={() => { setEditingPatient(p); setPatientForm({ ...p }) }}
                                   className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition">
                                   Edit
+                                </button>
+                                <button onClick={() => { setEditingPayment(p); setDiscountEdit(String(p.discount || 0)) }}
+                                  className="text-xs text-slate-600 hover:text-slate-800 font-semibold px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition">
+                                  Payment
                                 </button>
                                 <button onClick={() => deletePatient(p.id, p.name)}
                                   className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition">
@@ -502,6 +509,144 @@ export default function AdminPanel() {
                       setSavingDiscount(false)
                     }} className="btn-primary flex-1 py-3 text-sm">
                       {savingDiscount ? 'Saving…' : 'Apply Discount'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Edit Patient Modal */}
+        <AnimatePresence>
+          {editingPatient && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl border border-slate-100 my-4">
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-lg">Edit Patient</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">#{String(editingPatient.queue_number).padStart(3,'0')} · {editingPatient.name}</p>
+                  </div>
+                  <button onClick={() => setEditingPatient(null)} className="text-slate-400 hover:text-slate-700 p-2 rounded-xl hover:bg-slate-100 transition text-xl">✕</button>
+                </div>
+                <div className="p-6 space-y-5">
+                  {/* Basic info */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Full Name <span className="text-red-500">*</span></label>
+                      <input value={patientForm.name || ''} onChange={e => setPatientForm(f => ({ ...f, name: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Age <span className="text-red-500">*</span></label>
+                      <input type="number" min={0} value={patientForm.age || ''} onChange={e => setPatientForm(f => ({ ...f, age: parseInt(e.target.value) }))} className="field-input text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Gender</label>
+                      <div className="flex gap-2">
+                        {['male','female','other'].map(g => (
+                          <button key={g} type="button" onClick={() => setPatientForm(f => ({ ...f, gender: g }))}
+                            className={`flex-1 py-2 rounded-xl text-xs font-bold border capitalize transition
+                              ${patientForm.gender === g ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 text-slate-600 hover:border-indigo-300'}`}>
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Phone <span className="text-red-500">*</span></label>
+                      <input value={patientForm.phone || ''} onChange={e => setPatientForm(f => ({ ...f, phone: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Guardian Name</label>
+                      <input value={patientForm.guardian_name || ''} onChange={e => setPatientForm(f => ({ ...f, guardian_name: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">CNIC / B-Form</label>
+                      <input value={patientForm.cnic_bform || ''} onChange={e => setPatientForm(f => ({ ...f, cnic_bform: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Address</label>
+                      <input value={patientForm.address || ''} onChange={e => setPatientForm(f => ({ ...f, address: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Check-in Date &amp; Time</label>
+                      <input type="datetime-local" value={patientForm.check_in_at ? patientForm.check_in_at.slice(0,16) : ''}
+                        onChange={e => setPatientForm(f => ({ ...f, check_in_at: e.target.value }))} className="field-input text-sm" />
+                    </div>
+                    <div className="flex items-center gap-3 pt-5">
+                      <input type="checkbox" id="emrg-edit" checked={!!patientForm.is_emergency}
+                        onChange={e => setPatientForm(f => ({ ...f, is_emergency: e.target.checked }))}
+                        className="w-4 h-4 accent-red-500" />
+                      <label htmlFor="emrg-edit" className="text-sm font-semibold text-red-600">Emergency</label>
+                    </div>
+                  </div>
+
+                  {/* Vitals */}
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Vitals</p>
+                    <div className="grid grid-cols-4 gap-3">
+                      {[
+                        { key: 'bp',          label: 'BP',     ph: '120/80' },
+                        { key: 'temperature', label: 'Temp °F', ph: '98.6' },
+                        { key: 'pulse',       label: 'Pulse',  ph: '72 bpm' },
+                        { key: 'weight',      label: 'Weight', ph: '65 kg' },
+                      ].map(v => (
+                        <div key={v.key}>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">{v.label}</label>
+                          <input value={(patientForm as Record<string,string>)[v.key] || ''} placeholder={v.ph}
+                            onChange={e => setPatientForm(f => ({ ...f, [v.key]: e.target.value }))}
+                            className="field-input text-sm" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Payment */}
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Payment</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Method</label>
+                        <div className="flex gap-1">
+                          {['cash','easypaisa','jazzcash','bank'].map(m => (
+                            <button key={m} type="button" onClick={() => setPatientForm(f => ({ ...f, payment_method: m }))}
+                              className={`flex-1 py-1.5 rounded-lg text-xs font-bold border capitalize transition
+                                ${patientForm.payment_method === m ? 'bg-indigo-600 text-white border-indigo-600' : 'border-slate-200 text-slate-600 hover:border-indigo-300'}`}>
+                              {m === 'easypaisa' ? 'EP' : m === 'jazzcash' ? 'JC' : m.charAt(0).toUpperCase() + m.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Bill Amount</label>
+                        <input type="number" min={0} value={patientForm.bill_amount || ''} onChange={e => setPatientForm(f => ({ ...f, bill_amount: parseFloat(e.target.value) || 0 }))} className="field-input text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Discount</label>
+                        <input type="number" min={0} value={patientForm.discount || ''} onChange={e => setPatientForm(f => ({ ...f, discount: parseFloat(e.target.value) || 0 }))} className="field-input text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">Amount Paid</label>
+                        <input type="number" min={0} value={patientForm.amount_paid || ''} onChange={e => setPatientForm(f => ({ ...f, amount_paid: parseFloat(e.target.value) || 0 }))} className="field-input text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-1">
+                    <button onClick={() => setEditingPatient(null)} className="btn-secondary flex-1 py-3 text-sm">Cancel</button>
+                    <button disabled={savingPatient} onClick={async () => {
+                      if (!patientForm.name || !patientForm.phone) { notify('Name and phone are required'); return }
+                      setSavingPatient(true)
+                      const r = await fetch(`/api/patients/${editingPatient.id}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(patientForm)
+                      })
+                      if (r.ok) { notify('Patient updated ✓'); setEditingPatient(null); await loadPayments(payDate) }
+                      else notify('Failed to update patient')
+                      setSavingPatient(false)
+                    }} className="btn-primary flex-1 py-3 text-sm">
+                      {savingPatient ? 'Saving…' : 'Save Changes'}
                     </button>
                   </div>
                 </div>

@@ -27,6 +27,50 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
 }
 
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  try {
+    await requireRole(['admin', 'data_entry'])
+    const id = parseInt(params.id)
+    const { name, age, gender, guardian_name, cnic_bform, phone, address, is_emergency, check_in_at,
+            bp, temperature, pulse, weight, payment_method, bill_amount, discount, amount_paid, payment_status } = await req.json()
+
+    const bill  = parseFloat(bill_amount)  || 0
+    const disc  = parseFloat(discount)     || 0
+    const paid  = parseFloat(amount_paid)  || 0
+    const net   = Math.max(0, bill - disc)
+    const meth  = payment_method || 'cash'
+    const change = meth === 'cash' ? Math.max(0, paid - net) : 0
+    const pstat = payment_status || (paid >= net && net > 0 ? 'paid' : net === 0 ? 'pending' : paid > 0 ? 'partial' : 'pending')
+
+    const [updated] = await sql`
+      UPDATE patients SET
+        name           = ${name},
+        age            = ${parseInt(age)},
+        gender         = ${gender || 'male'},
+        guardian_name  = ${guardian_name || ''},
+        cnic_bform     = ${cnic_bform || ''},
+        phone          = ${phone},
+        address        = ${address},
+        is_emergency   = ${!!is_emergency},
+        check_in_at    = ${check_in_at},
+        bp             = ${bp || ''},
+        temperature    = ${temperature || ''},
+        pulse          = ${pulse || ''},
+        weight         = ${weight || ''},
+        payment_method = ${meth},
+        bill_amount    = ${bill},
+        discount       = ${disc},
+        amount_paid    = ${paid},
+        change_due     = ${change},
+        payment_status = ${pstat}
+      WHERE id = ${id}
+      RETURNING *`
+    return NextResponse.json(updated)
+  } catch {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+}
+
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   try {
     await requireRole(['admin', 'data_entry'])
