@@ -73,6 +73,7 @@ export default function DoctorPanel() {
   const [rxDiagnosis, setRxDiagnosis] = useState('')
   const [rxLabTests, setRxLabTests] = useState<string[]>([])
   const [rxAdvice, setRxAdvice] = useState('')
+  const [editingRx, setEditingRx] = useState<Prescription | null>(null)
   const [toast, setToast] = useState('')
   const [filter, setFilter] = useState<'all' | 'waiting' | 'in_progress' | 'done'>('all')
   const [queueDate, setQueueDate] = useState(new Date().toISOString().slice(0, 10))
@@ -182,6 +183,28 @@ export default function DoctorPanel() {
     setActionLoading(false)
   }
 
+  const startEditRx = (rx: Prescription) => {
+    setEditingRx(rx)
+    setRxTab('manual')
+    setRxComplaint(rx.complaint || '')
+    setRxHistory(rx.history || '')
+    setRxExamination(rx.examination || '')
+    setRxDiagnosis(rx.diagnosis || '')
+    setRxLabTests(rx.lab_tests || [])
+    setRxAdvice(rx.advice || '')
+    setRxNotes(rx.notes || '')
+    setMedicines(rx.medicines?.length ? rx.medicines : [{ name: '', dosage: '', instructions: '' }])
+    // scroll to form
+    document.getElementById('rx-form')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const cancelEditRx = () => {
+    setEditingRx(null)
+    setRxComplaint(''); setRxHistory(''); setRxExamination('')
+    setRxDiagnosis(''); setRxLabTests([]); setRxAdvice(''); setRxNotes('')
+    setMedicines([{ name: '', dosage: '', instructions: '' }])
+  }
+
   const savePrescription = async (andPrint = false) => {
     if (!selected) return
     if (rxTab === 'manual' && !rxComplaint.trim()) { notify('Chief Complaint is required'); return }
@@ -201,16 +224,19 @@ export default function DoctorPanel() {
       if (valid.length) fd.append('medicines', JSON.stringify(valid))
     } else if (rxImage) {
       fd.append('file', rxImage)
-    } else {
+    } else if (!editingRx) {
       notify('Upload a prescription image'); setRxSaving(false); return
     }
-    const r = await fetch('/api/prescriptions', { method: 'POST', body: fd })
+
+    const url    = editingRx ? `/api/prescriptions/${editingRx.id}` : '/api/prescriptions'
+    const method = editingRx ? 'PATCH' : 'POST'
+    const r = await fetch(url, { method, body: fd })
     if (r.ok) {
       const saved = await r.json()
-      // Merge doctor info from current session so printPrescription has it
       const forPrint = { ...saved, doctor_name: user?.name, qualification: user?.qualification, speciality: user?.speciality, license_no: user?.license_no }
-      notify('Prescription saved ✓')
+      notify(editingRx ? 'Prescription updated ✓' : 'Prescription saved ✓')
       if (andPrint) printPrescription(forPrint)
+      setEditingRx(null)
       setMedicines([{ name: '', dosage: '', instructions: '' }])
       setRxNotes(''); setRxImage(null)
       setRxComplaint(''); setRxHistory(''); setRxExamination('')
@@ -514,15 +540,30 @@ export default function DoctorPanel() {
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Previous Prescriptions ({selected.prescriptions.length})</p>
                       <div className="space-y-3">
                         {selected.prescriptions.map(rx => (
-                          <div key={rx.id} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                            <div className="flex items-center justify-between mb-2">
+                          <div key={rx.id} className={`bg-slate-50 rounded-xl p-4 border transition ${editingRx?.id === rx.id ? 'border-indigo-400 bg-indigo-50/40' : 'border-slate-100'}`}>
+                            <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                               <p className="text-xs text-slate-400 font-semibold">
                                 Dr. {rx.doctor_name} · {new Date(rx.created_at).toLocaleDateString('en-PK', { dateStyle: 'medium' })}
+                                {editingRx?.id === rx.id && <span className="ml-2 text-indigo-600 font-bold">✏ Editing</span>}
                               </p>
-                              <button onClick={() => printPrescription(rx)}
-                                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition border border-indigo-200">
-                                🖨 Print PDF
-                              </button>
+                              <div className="flex gap-1.5">
+                                <button onClick={() => startEditRx(rx)}
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 transition border border-indigo-200">
+                                  ✏ Edit
+                                </button>
+                                <button onClick={() => printPrescription(rx)}
+                                  className="text-xs text-slate-600 hover:text-slate-800 font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 transition border border-slate-200">
+                                  🖨 Print
+                                </button>
+                                <button onClick={async () => {
+                                  if (!confirm('Delete this prescription?')) return
+                                  const r = await fetch(`/api/prescriptions/${rx.id}`, { method: 'DELETE' })
+                                  if (r.ok) { notify('Prescription deleted'); await refreshSelected() }
+                                  else notify('Failed to delete')
+                                }} className="text-xs text-red-500 hover:text-red-700 font-bold px-2.5 py-1 rounded-lg bg-red-50 hover:bg-red-100 transition border border-red-200">
+                                  ✕
+                                </button>
+                              </div>
                             </div>
                             {rx.complaint && <p className="text-xs text-slate-600 mb-1"><span className="font-bold text-slate-700">Complaint:</span> {rx.complaint}</p>}
                             {rx.diagnosis && <p className="text-xs font-bold text-indigo-700 mb-1">Dx: {rx.diagnosis}</p>}
@@ -552,10 +593,19 @@ export default function DoctorPanel() {
                     </div>
                   )}
 
-                  {/* New prescription form */}
-                  <div className="card p-5 space-y-4">
+                  {/* Prescription form */}
+                  <div id="rx-form" className="card p-5 space-y-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">New Prescription</p>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          {editingRx ? '✏ Editing Prescription' : 'New Prescription'}
+                        </p>
+                        {editingRx && (
+                          <button onClick={cancelEditRx} className="text-xs text-slate-400 hover:text-slate-600 mt-0.5 transition">
+                            ✕ Cancel edit
+                          </button>
+                        )}
+                      </div>
                       <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
                         {(['manual', 'photo'] as const).map(t => (
                           <button key={t} onClick={() => setRxTab(t)}
@@ -680,12 +730,12 @@ export default function DoctorPanel() {
                     <div className="flex gap-2 pt-1">
                       <button onClick={() => savePrescription(false)} disabled={rxSaving}
                         className="flex-1 py-3 rounded-xl font-bold text-sm border-2 border-indigo-600 text-indigo-700 hover:bg-indigo-50 transition disabled:opacity-50">
-                        {rxSaving ? 'Saving…' : '💾 Save'}
+                        {rxSaving ? 'Saving…' : editingRx ? '💾 Update' : '💾 Save'}
                       </button>
                       {rxTab === 'manual' && (
                         <button onClick={() => savePrescription(true)} disabled={rxSaving}
                           className="flex-1 btn-primary py-3 text-sm">
-                          {rxSaving ? '…' : '🖨 Save & Print'}
+                          {rxSaving ? '…' : editingRx ? '🖨 Update & Print' : '🖨 Save & Print'}
                         </button>
                       )}
                     </div>
