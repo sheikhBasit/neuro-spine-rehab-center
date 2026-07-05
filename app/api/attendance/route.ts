@@ -17,8 +17,9 @@ export async function GET(req: Request) {
       ORDER BY a.shift_start ASC
     `
     return NextResponse.json(rows)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[attendance GET]', e)
+    return authErrorResponse(e)
   }
 }
 

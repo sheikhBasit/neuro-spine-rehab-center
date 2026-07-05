@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
+import { requireRole, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +24,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       RETURNING *
     `
     return NextResponse.json(patient)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[patients/status PATCH]', e)
+    return authErrorResponse(e)
   }
 }

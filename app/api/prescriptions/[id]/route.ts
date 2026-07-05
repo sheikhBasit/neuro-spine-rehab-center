@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
+import { requireRole, authErrorResponse } from '@/lib/auth'
 import { uploadBuffer } from '@/lib/cloudinary'
 
 export const dynamic = 'force-dynamic'
@@ -50,8 +50,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
           WHERE id=${id} RETURNING *`
 
     return NextResponse.json(rx)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[prescriptions PATCH]', e)
+    return authErrorResponse(e)
   }
 }
 
@@ -60,7 +61,8 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     await requireRole(['doctor', 'admin'])
     await sql`DELETE FROM prescriptions WHERE id = ${parseInt(params.id)}`
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[prescriptions DELETE]', e)
+    return authErrorResponse(e)
   }
 }

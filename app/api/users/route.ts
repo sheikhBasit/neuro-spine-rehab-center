@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { bcrypt, requireRole } from '@/lib/auth'
+import { bcrypt, requireRole, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,8 +12,9 @@ export async function GET() {
       FROM users ORDER BY created_at DESC
     `
     return NextResponse.json(users)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[users GET]', e)
+    return authErrorResponse(e)
   }
 }
 

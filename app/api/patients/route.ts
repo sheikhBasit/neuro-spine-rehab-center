@@ -49,12 +49,13 @@ export async function GET(req: Request) {
         u.name AS doctor_name
       FROM patients p
       LEFT JOIN users u ON p.seen_by_doctor_id = u.id
-      WHERE p.check_in_at::date = ${date || 'CURRENT_DATE'}::date
+      WHERE p.check_in_at::date = ${date || new Date().toISOString().slice(0, 10)}::date
       ORDER BY p.is_emergency DESC, p.check_in_at ASC
     `
     return NextResponse.json(patients)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error(e)
+    return authErrorResponse(e)
   }
 }
 

@@ -35,7 +35,8 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     await requireRole(['admin'])
     await sql`DELETE FROM inventory_items WHERE id = ${parseInt(params.id)}`
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[inventory DELETE]', e)
+    return authErrorResponse(e)
   }
 }

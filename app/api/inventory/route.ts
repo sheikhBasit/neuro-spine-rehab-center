@@ -28,8 +28,9 @@ export async function GET(req: Request) {
       : await sql`SELECT *, (CASE WHEN type='consumable' AND expiry_date IS NOT NULL THEN (expiry_date::date - CURRENT_DATE)::int ELSE NULL END) AS days_left FROM inventory_items ORDER BY type, created_at DESC`
 
     return NextResponse.json(rows)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[inventory GET]', e)
+    return authErrorResponse(e)
   }
 }
 

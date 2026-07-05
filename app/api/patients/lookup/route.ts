@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
+import { requireRole, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +20,8 @@ export async function GET(req: Request) {
       LIMIT 10
     `
     return NextResponse.json(rows)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[patients/lookup GET]', e)
+    return authErrorResponse(e)
   }
 }

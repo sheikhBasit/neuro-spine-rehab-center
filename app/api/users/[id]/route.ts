@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
+import { requireRole, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,8 +35,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         speciality=${speciality||''}, qualification=${qualification||''}, license_no=${license_no||''}
       WHERE id=${id} AND role != 'admin' RETURNING id, role, name, email, phone, cnic, speciality, qualification, license_no, active`
     return NextResponse.json(u)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[users PATCH]', e)
+    return authErrorResponse(e)
   }
 }
 
@@ -45,7 +46,8 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     await requireRole(['admin'])
     await sql`DELETE FROM users WHERE id = ${parseInt(params.id)} AND role != 'admin'`
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[users DELETE]', e)
+    return authErrorResponse(e)
   }
 }

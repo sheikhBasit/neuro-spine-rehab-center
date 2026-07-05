@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
+import { requireRole, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,8 +35,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       WHERE pr.patient_id = ${id} ORDER BY pr.created_at`
 
     return NextResponse.json({ ...patient, documents, previousDocuments, prescriptions })
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[patients/[id] GET]', e)
+    return authErrorResponse(e)
   }
 }
 
@@ -79,8 +80,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       WHERE id = ${id}
       RETURNING *`
     return NextResponse.json(updated)
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[patients/[id] PATCH]', e)
+    return authErrorResponse(e)
   }
 }
 
@@ -90,7 +92,8 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     const id = parseInt(params.id)
     await sql`DELETE FROM patients WHERE id = ${id}`
     return NextResponse.json({ ok: true })
-  } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch (e) {
+    console.error('[patients/[id] DELETE]', e)
+    return authErrorResponse(e)
   }
 }

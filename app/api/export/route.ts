@@ -1,5 +1,5 @@
 import { sql } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
+import { requireRole, authErrorResponse } from '@/lib/auth'
 import * as XLSX from 'xlsx'
 
 export const runtime = 'nodejs'
@@ -42,7 +42,8 @@ export async function GET() {
         'Content-Disposition': `attachment; filename="${filename}"`,
       },
     })
-  } catch {
-    return new Response('Unauthorized', { status: 401 })
+  } catch (e) {
+    console.error('[export GET]', e)
+    return authErrorResponse(e)
   }
 }
