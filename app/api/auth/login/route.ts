@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 8,
+      maxAge: 60 * 60 * 24,
     })
     return res
   } catch (e) {

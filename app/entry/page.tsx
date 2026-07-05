@@ -57,6 +57,12 @@ export default function EntryPanel() {
   const [queueDate, setQueueDate] = useState(new Date().toISOString().slice(0, 10))
   const queueDateRef = useRef(new Date().toISOString().slice(0, 10))
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
+
+  const jumpToForm = () => {
+    nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    nameInputRef.current?.focus()
+  }
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 4000) }
 
@@ -204,6 +210,10 @@ export default function EntryPanel() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button onClick={jumpToForm}
+            className="text-xs bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-400 hover:to-sky-400 text-white px-3.5 py-1.5 rounded-full font-bold shadow-sm transition flex items-center gap-1.5">
+            <span className="text-sm leading-none">+</span> Register Patient
+          </button>
           <span className="text-xs bg-indigo-800/60 border border-indigo-700/40 px-3 py-1.5 rounded-full font-medium">
             Data Entry{user ? ` · ${user.name}` : ''}
           </span>
@@ -246,7 +256,7 @@ export default function EntryPanel() {
               {/* Patient info */}
               <div className="card p-5 space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Field label="Full Name *"           value={form.name}           onChange={set('name')}           placeholder="Patient full name"   required />
+                  <Field label="Full Name *"           value={form.name}           onChange={set('name')}           placeholder="Patient full name"   required inputRef={nameInputRef} />
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Gender *</label>
                     <div className="flex gap-2">
@@ -269,7 +279,7 @@ export default function EntryPanel() {
                       {showLookup && (
                         <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                           className="absolute top-full left-0 right-0 z-10 mt-1 bg-amber-50 border border-amber-200 rounded-xl p-3 shadow-lg">
-                          <p className="text-xs font-bold text-amber-700 mb-2">Returning patient — click to pre-fill:</p>
+                          <p className="text-xs font-bold text-amber-700 mb-2">Family members already on this number — click to pre-fill their details:</p>
                           {lookupResults.map(p => (
                             <button key={p.id} type="button" onClick={() => prefill(p)}
                               className="w-full text-left px-3 py-2 bg-white rounded-lg border border-amber-100 hover:border-amber-300 transition text-sm mb-1">
@@ -277,7 +287,10 @@ export default function EntryPanel() {
                               <span className="text-slate-500 text-xs ml-2">{p.age} yrs · {p.cnic_bform || 'No CNIC'}</span>
                             </button>
                           ))}
-                          <button type="button" onClick={() => setShowLookup(false)} className="text-xs text-slate-400 hover:text-slate-600 transition">Dismiss</button>
+                          <button type="button" onClick={() => setShowLookup(false)}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition">
+                            None of these — register a new family member with this number
+                          </button>
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -550,12 +563,12 @@ function QCard({ p, i, dim, onDelete }: { p: Patient; i: number; dim?: boolean; 
   )
 }
 
-function Field({ label, value, onChange, type = 'text', placeholder, required, error }:
-  { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; type?: string; placeholder?: string; required?: boolean; error?: string }) {
+function Field({ label, value, onChange, type = 'text', placeholder, required, error, inputRef }:
+  { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; type?: string; placeholder?: string; required?: boolean; error?: string; inputRef?: React.MutableRefObject<HTMLInputElement | null> }) {
   return (
     <div>
       <label className="block text-sm font-semibold text-slate-700 mb-1.5">{label}</label>
-      <input type={type} value={value} onChange={onChange} placeholder={placeholder} required={required}
+      <input ref={inputRef} type={type} value={value} onChange={onChange} placeholder={placeholder} required={required}
         className={`field-input ${error ? 'border-red-400 focus:ring-red-400' : ''}`} />
       {error && <p className="text-xs text-red-600 mt-1 font-medium">{error}</p>}
     </div>

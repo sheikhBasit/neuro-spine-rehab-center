@@ -10,7 +10,7 @@ export type Session = { id: number; role: string; name: string }
 export async function signToken(payload: Session) {
   return new SignJWT(payload as Record<string, unknown>)
     .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('8h')
+    .setExpirationTime('24h')
     .sign(secret())
 }
 
