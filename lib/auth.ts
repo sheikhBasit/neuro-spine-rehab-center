@@ -1,10 +1,14 @@
 import { SignJWT, jwtVerify } from 'jose'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import bcrypt from 'bcryptjs'
 import { NextResponse } from 'next/server'
 
 const secret = () => new TextEncoder().encode(process.env.JWT_SECRET!)
-export const COOKIE = 'clinic_token'
+
+// One cookie per role so logging in as a different role in another tab
+// (same browser/laptop) doesn't clobber an already-open session.
+export const ROLES = ['admin', 'doctor', 'data_entry'] as const
+export const cookieName = (role: string) => `clinic_token_${role}`
 
 export type Session = { id: number; role: string; name: string }
 
@@ -26,9 +30,16 @@ export async function verifyToken(token: string): Promise<Session | null> {
 }
 
 export async function getSession(): Promise<Session | null> {
-  const token = cookies().get(COOKIE)?.value
-  if (!token) return null
-  return verifyToken(token)
+  const jar = cookies()
+  const roleHint = headers().get('x-session-role')
+  const rolesToTry = roleHint && (ROLES as readonly string[]).includes(roleHint) ? [roleHint] : ROLES
+  for (const role of rolesToTry) {
+    const token = jar.get(cookieName(role))?.value
+    if (!token) continue
+    const session = await verifyToken(token)
+    if (session) return session
+  }
+  return null
 }
 
 export async function requireRole(roles: string[]): Promise<Session> {

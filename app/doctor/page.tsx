@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
+import { installRoleFetch } from '@/lib/roleFetch'
 
 interface Patient {
   id: number; name: string; age: number; gender: string; queue_number: number; is_emergency: boolean
@@ -57,6 +58,7 @@ function fmtElapsed(secs: number) {
 type ShiftState = { status: 'idle' } | { status: 'active'; startedAt: number; attendanceId: number } | { status: 'break'; startedAt: number; attendanceId: number; breakAt: number }
 
 export default function DoctorPanel() {
+  installRoleFetch('doctor')
   const router = useRouter()
   const [patients, setPatients] = useState<Patient[]>([])
   const [selected, setSelected] = useState<PatientDetail | null>(null)

@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
-import { COOKIE } from '@/lib/auth'
+import { getSession, cookieName } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST() {
+  const session = await getSession()
   const res = NextResponse.json({ ok: true })
-  res.cookies.set(COOKIE, '', { maxAge: 0, path: '/' })
+  if (session) {
+    res.cookies.set(cookieName(session.role), '', { maxAge: 0, path: '/' })
+  }
   return res
 }

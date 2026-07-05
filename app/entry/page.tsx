@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
+import { installRoleFetch } from '@/lib/roleFetch'
 
 interface Patient {
   id: number; name: string; age: number; queue_number: number
@@ -41,6 +42,7 @@ function validatePhone(v: string) { return v.replace(/[-\s]/g, '').length === 11
 function pkr(n: number | string) { return `PKR ${Number(n).toLocaleString('en-PK', { minimumFractionDigits: 0 })}` }
 
 export default function EntryPanel() {
+  installRoleFetch('data_entry')
   const router = useRouter()
   const [form, setForm] = useState(blank)
   const [patients, setPatients] = useState<Patient[]>([])

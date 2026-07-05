@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
+import { installRoleFetch } from '@/lib/roleFetch'
 
 const Charts = dynamic(() => import('./Charts'), { ssr: false })
 
@@ -30,6 +31,7 @@ const roleLabel: Record<string, string> = { admin: 'Admin', doctor: 'Doctor', da
 const blankItem = { name: '', type: 'consumable', category: '', quantity: '', unit: '', expiry_date: '', status: 'active', notes: '' }
 
 export default function AdminPanel() {
+  installRoleFetch('admin')
   const router = useRouter()
   const [tab, setTab] = useState<'dashboard' | 'users' | 'reports' | 'inventory' | 'patients'>('dashboard')
   const [users, setUsers] = useState<User[]>([])

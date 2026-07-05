@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { bcrypt, signToken, COOKIE } from '@/lib/auth'
+import { bcrypt, signToken, cookieName } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     const token = await signToken({ id: user.id, role: user.role, name: user.name })
 
     const res = NextResponse.json({ role: user.role, name: user.name })
-    res.cookies.set(COOKIE, token, {
+    res.cookies.set(cookieName(user.role), token, {
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
