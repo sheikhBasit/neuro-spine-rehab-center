@@ -132,6 +132,7 @@ export default function EntryPanel() {
     }
 
     const res = await fetch('/api/patients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    if (res.status === 401) { router.push('/login'); return }
     const data = await res.json()
     if (!res.ok) { setError(data.error || 'Failed to register patient'); setSubmitting(false); return }
 

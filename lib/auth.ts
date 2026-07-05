@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
+import { NextResponse } from 'next/server'
 
 const secret = () => new TextEncoder().encode(process.env.JWT_SECRET!)
 export const COOKIE = 'clinic_token'
@@ -33,6 +34,15 @@ export async function requireRole(roles: string[]): Promise<Session> {
   const session = await getSession()
   if (!session || !roles.includes(session.role)) throw new Error('Unauthorized')
   return session
+}
+
+// Route handlers should call this in their catch block so an expired/invalid
+// session reports 401 instead of being masked as a generic 500.
+export function authErrorResponse(e: unknown) {
+  if (e instanceof Error && e.message === 'Unauthorized') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return NextResponse.json({ error: 'Server error' }, { status: 500 })
 }
 
 export { bcrypt }

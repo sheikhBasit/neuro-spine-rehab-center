@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
+import { requireRole, authErrorResponse } from '@/lib/auth'
 import { sendExpiryAlert } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +26,6 @@ export async function POST() {
     return NextResponse.json({ ...result, count: items.length })
   } catch (e) {
     console.error('[alerts POST]', e)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    return authErrorResponse(e)
   }
 }

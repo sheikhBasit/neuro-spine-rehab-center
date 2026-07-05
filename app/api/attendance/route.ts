@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
-import { requireRole } from '@/lib/auth'
+import { requireRole, authErrorResponse } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +40,6 @@ export async function POST() {
     return NextResponse.json(record, { status: 201 })
   } catch (e) {
     console.error('[attendance POST]', e)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
+    return authErrorResponse(e)
   }
 }
