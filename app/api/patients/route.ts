@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       const fromD  = from || '2000-01-01'
       const toD    = to   || '2100-12-31'
       const patients = await sql`
-        SELECT p.id, p.name, p.age, p.gender, p.guardian_name, p.cnic_bform, p.phone, p.address,
+        SELECT p.id, p.name, p.age, p.age_unit, p.gender, p.guardian_name, p.cnic_bform, p.phone, p.address,
                p.queue_number, p.is_emergency, p.status, p.check_in_at, p.seen_at,
                p.bp, p.temperature, p.pulse, p.weight,
                p.payment_method, p.bill_amount, p.discount, p.amount_paid, p.change_due, p.payment_status,
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     // default: single date queue (existing behaviour)
     const patients = await sql`
       SELECT
-        p.id, p.name, p.age, p.gender, p.guardian_name, p.cnic_bform, p.phone, p.address,
+        p.id, p.name, p.age, p.age_unit, p.gender, p.guardian_name, p.cnic_bform, p.phone, p.address,
         p.queue_number, p.is_emergency, p.status, p.check_in_at, p.seen_at,
         p.bp, p.temperature, p.pulse, p.weight,
         p.payment_method, p.bill_amount, p.discount, p.amount_paid, p.change_due, p.payment_status,
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   try {
     await requireRole(['data_entry', 'admin'])
     const {
-      name, age, gender, guardian_name, cnic_bform, phone, address, is_emergency,
+      name, age, age_unit, gender, guardian_name, cnic_bform, phone, address, is_emergency,
       payment_method, bill_amount, discount, amount_paid, payment_status,
       check_in_at, bp, temperature, pulse, weight,
     } = await req.json()
@@ -71,6 +71,8 @@ export async function POST(req: Request) {
     if (!name || !age || !phone || !address) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
+
+    const ageUnit = age_unit === 'months' ? 'months' : 'years'
 
     const payMethod  = payment_method  || 'cash'
     const bill       = parseFloat(bill_amount)  || 0
@@ -91,19 +93,19 @@ export async function POST(req: Request) {
     const vitals = { bp: bp || '', temperature: temperature || '', pulse: pulse || '', weight: weight || '' }
     const [patient] = check_in_at
       ? await sql`
-          INSERT INTO patients (name, age, gender, guardian_name, cnic_bform, phone, address, queue_number, is_emergency,
+          INSERT INTO patients (name, age, age_unit, gender, guardian_name, cnic_bform, phone, address, queue_number, is_emergency,
                                 payment_method, bill_amount, discount, amount_paid, change_due, payment_status, check_in_at,
                                 bp, temperature, pulse, weight)
-          VALUES (${name}, ${parseInt(age)}, ${genderVal}, ${guardian_name || ''}, ${cnic_bform || ''},
+          VALUES (${name}, ${parseInt(age)}, ${ageUnit}, ${genderVal}, ${guardian_name || ''}, ${cnic_bform || ''},
                   ${phone}, ${address}, ${queue_number}, ${!!is_emergency},
                   ${payMethod}, ${bill}, ${disc}, ${paid}, ${change}, ${payStatus}, ${check_in_at},
                   ${vitals.bp}, ${vitals.temperature}, ${vitals.pulse}, ${vitals.weight})
           RETURNING *`
       : await sql`
-          INSERT INTO patients (name, age, gender, guardian_name, cnic_bform, phone, address, queue_number, is_emergency,
+          INSERT INTO patients (name, age, age_unit, gender, guardian_name, cnic_bform, phone, address, queue_number, is_emergency,
                                 payment_method, bill_amount, discount, amount_paid, change_due, payment_status,
                                 bp, temperature, pulse, weight)
-          VALUES (${name}, ${parseInt(age)}, ${genderVal}, ${guardian_name || ''}, ${cnic_bform || ''},
+          VALUES (${name}, ${parseInt(age)}, ${ageUnit}, ${genderVal}, ${guardian_name || ''}, ${cnic_bform || ''},
                   ${phone}, ${address}, ${queue_number}, ${!!is_emergency},
                   ${payMethod}, ${bill}, ${disc}, ${paid}, ${change}, ${payStatus},
                   ${vitals.bp}, ${vitals.temperature}, ${vitals.pulse}, ${vitals.weight})

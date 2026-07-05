@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { installRoleFetch } from '@/lib/roleFetch'
+import { formatAge } from '@/lib/age'
 
 const Charts = dynamic(() => import('./Charts'), { ssr: false })
 
@@ -16,7 +17,7 @@ interface ReportData {
 }
 interface AttendanceRecord { id: number; doctor_name: string; speciality: string; shift_start: string; shift_end: string | null; total_minutes: number | null; breaks: { start: string; end: string | null }[] }
 interface InventoryItem { id: number; name: string; type: 'consumable' | 'permanent'; category: string; quantity: number; unit: string; expiry_date: string | null; status: string | null; notes: string; days_left: number | null; created_at: string }
-interface PaymentRecord { id: number; name: string; age: number; gender: string; status: string; queue_number: number; check_in_at: string; guardian_name: string; cnic_bform: string; phone: string; address: string; is_emergency: boolean; bp: string; temperature: string; pulse: string; weight: string; payment_method: string; bill_amount: number; discount: number; amount_paid: number; change_due: number; payment_status: string }
+interface PaymentRecord { id: number; name: string; age: number; age_unit: string; gender: string; status: string; queue_number: number; check_in_at: string; guardian_name: string; cnic_bform: string; phone: string; address: string; is_emergency: boolean; bp: string; temperature: string; pulse: string; weight: string; payment_method: string; bill_amount: number; discount: number; amount_paid: number; change_due: number; payment_status: string }
 
 const blankDoctor = { role: 'doctor', name: '', email: '', password: '', phone: '', cnic: '', license_no: '', speciality: '', qualification: '' }
 const blankStaff  = { role: 'data_entry', name: '', email: '', password: '', phone: '' }
@@ -572,7 +573,17 @@ export default function AdminPanel() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Age <span className="text-red-500">*</span></label>
-                      <input type="number" min={0} value={patientForm.age || ''} onChange={e => setPatientForm(f => ({ ...f, age: parseInt(e.target.value) }))} className="field-input text-sm" />
+                      <div className="flex gap-2">
+                        <input type="number" min={0} value={patientForm.age || ''} onChange={e => setPatientForm(f => ({ ...f, age: parseInt(e.target.value) }))} className="field-input text-sm flex-1" />
+                        <div className="flex rounded-xl border-2 border-slate-200 overflow-hidden shrink-0">
+                          {(['years', 'months'] as const).map(u => (
+                            <button key={u} type="button" onClick={() => setPatientForm(f => ({ ...f, age_unit: u }))}
+                              className={`px-2.5 text-xs font-bold transition ${(patientForm.age_unit || 'years') === u ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+                              {u === 'years' ? 'Yrs' : 'Mo'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Gender</label>
@@ -1169,7 +1180,7 @@ export default function AdminPanel() {
                                 {p.cnic_bform && <p className="text-xs text-slate-400">{p.cnic_bform}</p>}
                               </td>
                               <td className="px-4 py-3 text-slate-600">
-                                {p.age} yrs
+                                {formatAge(p.age, p.age_unit)}
                                 <span className={`ml-1.5 text-xs font-semibold px-1.5 py-0.5 rounded-full
                                   ${p.gender === 'female' ? 'bg-pink-100 text-pink-700' : p.gender === 'other' ? 'bg-violet-100 text-violet-700' : 'bg-sky-100 text-sky-700'}`}>
                                   {p.gender || 'male'}

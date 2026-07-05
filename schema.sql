@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS patients (
   id                SERIAL PRIMARY KEY,
   name              TEXT NOT NULL,
   age               INT  NOT NULL,
+  age_unit          TEXT NOT NULL DEFAULT 'years' CHECK (age_unit IN ('years', 'months')),
   guardian_name     TEXT DEFAULT '',
   cnic_bform        TEXT DEFAULT '',
   phone             TEXT NOT NULL,

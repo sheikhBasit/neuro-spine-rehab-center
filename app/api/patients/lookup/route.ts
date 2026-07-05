@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     if (!phone || phone.length < 6) return NextResponse.json([])
 
     const rows = await sql`
-      SELECT DISTINCT ON (cnic_bform, name) id, name, age, guardian_name, cnic_bform, phone, address
+      SELECT DISTINCT ON (cnic_bform, name) id, name, age, age_unit, guardian_name, cnic_bform, phone, address
       FROM patients
       WHERE phone = ${phone}
       ORDER BY cnic_bform, name, check_in_at DESC

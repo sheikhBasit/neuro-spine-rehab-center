@@ -3,14 +3,15 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { installRoleFetch } from '@/lib/roleFetch'
+import { formatAge } from '@/lib/age'
 
 interface Patient {
-  id: number; name: string; age: number; queue_number: number
+  id: number; name: string; age: number; age_unit: string; queue_number: number
   is_emergency: boolean; status: string; check_in_at: string; phone: string
   payment_method: string; bill_amount: number; discount: number
   amount_paid: number; change_due: number; payment_status: string
 }
-interface LookupResult { id: number; name: string; age: number; guardian_name: string; cnic_bform: string; phone: string; address: string }
+interface LookupResult { id: number; name: string; age: number; age_unit: string; guardian_name: string; cnic_bform: string; phone: string; address: string }
 
 const STATUS_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
   waiting:     { bg: 'bg-sky-50 border-sky-200',       text: 'text-sky-700',     dot: 'bg-sky-400' },
@@ -29,7 +30,7 @@ const todayStr = () => new Date().toISOString().slice(0, 16) // 'YYYY-MM-DDTHH:M
 const dateLabel = (d: string) => new Date(d).toLocaleDateString('en-PK', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
 const blank = {
-  name: '', age: '', gender: 'male', guardian_name: '', cnic_bform: '', phone: '', address: '',
+  name: '', age: '', age_unit: 'years', gender: 'male', guardian_name: '', cnic_bform: '', phone: '', address: '',
   is_emergency: false,
   bp: '', temperature: '', pulse: '', weight: '',
   payment_method: 'cash', bill_amount: '', discount: '', amount_paid: '',
@@ -85,7 +86,7 @@ export default function EntryPanel() {
   }
 
   const prefill = (p: LookupResult) => {
-    setForm(f => ({ ...f, name: p.name, age: String(p.age), guardian_name: p.guardian_name, cnic_bform: p.cnic_bform, address: p.address }))
+    setForm(f => ({ ...f, name: p.name, age: String(p.age), age_unit: p.age_unit || 'years', guardian_name: p.guardian_name, cnic_bform: p.cnic_bform, address: p.address }))
     setCnicError(''); setShowLookup(false)
   }
 
@@ -273,7 +274,22 @@ export default function EntryPanel() {
                       ))}
                     </div>
                   </div>
-                  <Field label="Age *"                 value={form.age}            onChange={set('age')}            placeholder="e.g. 45" type="number" required />
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Age *</label>
+                    <div className="flex gap-2">
+                      <input type="number" min={0} value={form.age} onChange={set('age')}
+                        placeholder={form.age_unit === 'months' ? 'e.g. 6' : 'e.g. 45'} required
+                        className="field-input flex-1" />
+                      <div className="flex rounded-xl border-2 border-slate-200 overflow-hidden shrink-0">
+                        {(['years', 'months'] as const).map(u => (
+                          <button key={u} type="button" onClick={() => setForm(f => ({ ...f, age_unit: u }))}
+                            className={`px-3 text-xs font-bold transition ${form.age_unit === u ? 'bg-indigo-500 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
+                            {u === 'years' ? 'Yrs' : 'Mo'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   <Field label="Father / Husband Name" value={form.guardian_name}  onChange={set('guardian_name')}  placeholder="Guardian name" />
                   <Field label="CNIC / B-Form No."     value={form.cnic_bform}     onChange={set('cnic_bform')}     placeholder="35202-XXXXXXX-1" error={cnicError} />
                   <div className="relative">
@@ -287,7 +303,7 @@ export default function EntryPanel() {
                             <button key={p.id} type="button" onClick={() => prefill(p)}
                               className="w-full text-left px-3 py-2 bg-white rounded-lg border border-amber-100 hover:border-amber-300 transition text-sm mb-1">
                               <span className="font-semibold text-slate-800">{p.name}</span>
-                              <span className="text-slate-500 text-xs ml-2">{p.age} yrs · {p.cnic_bform || 'No CNIC'}</span>
+                              <span className="text-slate-500 text-xs ml-2">{formatAge(p.age, p.age_unit)} · {p.cnic_bform || 'No CNIC'}</span>
                             </button>
                           ))}
                           <button type="button" onClick={() => setShowLookup(false)}
@@ -542,7 +558,7 @@ function QCard({ p, i, dim, onDelete }: { p: Patient; i: number; dim?: boolean; 
         </span>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-slate-800 text-sm truncate">{p.name}</p>
-          <p className="text-xs text-slate-500">{p.age} yrs · {dateStr} · {timeStr}</p>
+          <p className="text-xs text-slate-500">{formatAge(p.age, p.age_unit)} · {dateStr} · {timeStr}</p>
         </div>
         <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
           <span className={`flex items-center gap-1 text-xs font-bold ${p.is_emergency ? 'text-red-600' : s.text}`}>

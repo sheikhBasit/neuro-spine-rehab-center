@@ -13,7 +13,7 @@ export async function GET() {
         p.queue_number AS "Queue #",
         CASE WHEN p.is_emergency THEN 'YES' ELSE 'NO' END AS "Emergency",
         p.name AS "Patient Name",
-        p.age AS "Age",
+        CASE WHEN p.age_unit = 'months' THEN p.age || ' mo' ELSE p.age || ' yrs' END AS "Age",
         p.guardian_name AS "Father/Husband",
         p.cnic_bform AS "CNIC / B-Form",
         p.phone AS "Phone",

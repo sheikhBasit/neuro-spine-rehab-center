@@ -3,9 +3,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { installRoleFetch } from '@/lib/roleFetch'
+import { formatAge } from '@/lib/age'
 
 interface Patient {
-  id: number; name: string; age: number; gender: string; queue_number: number; is_emergency: boolean
+  id: number; name: string; age: number; age_unit: string; gender: string; queue_number: number; is_emergency: boolean
   status: string; check_in_at: string; guardian_name: string; cnic_bform: string
   phone: string; address: string; doctor_name?: string
   payment_method: string; bill_amount: number; discount: number
@@ -303,7 +304,7 @@ export default function DoctorPanel() {
     </div>
     <div class="patient-bar">
       <div class="pf"><label>Patient</label><span>${selected.name}</span></div>
-      <div class="pf"><label>Age / Gender</label><span>${selected.age} yrs / ${selected.gender || 'male'}</span></div>
+      <div class="pf"><label>Age / Gender</label><span>${formatAge(selected.age, selected.age_unit)} / ${selected.gender || 'male'}</span></div>
       <div class="pf"><label>Date</label><span>${new Date(rx.created_at).toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'})}</span></div>
       <div class="pf"><label>MR #</label><span>${String(selected.queue_number).padStart(3,'0')}</span></div>
     </div>
@@ -407,7 +408,7 @@ export default function DoctorPanel() {
                       <Badge status={selected.status} emergency={selected.is_emergency} />
                     </div>
                     <p className="font-bold text-slate-800 text-xl">{selected.name}
-                      <span className="text-slate-400 font-normal text-base ml-2">· {selected.age} yrs · {selected.gender || 'male'}</span>
+                      <span className="text-slate-400 font-normal text-base ml-2">· {formatAge(selected.age, selected.age_unit)} · {selected.gender || 'male'}</span>
                     </p>
                     {selected.doctor_name && <p className="text-sm text-slate-500 mt-0.5">Being seen by {selected.doctor_name}</p>}
                   </div>
@@ -900,7 +901,7 @@ function QueueCard({ p, onClick, index, active }: { p: Patient; onClick: () => v
         </span>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-slate-800 text-sm truncate">{p.name}</p>
-          <p className="text-xs text-slate-500 mt-0.5">{p.age} yrs · {minsAgo(p.check_in_at)}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{formatAge(p.age, p.age_unit)} · {minsAgo(p.check_in_at)}</p>
         </div>
         <div className="shrink-0">
           {p.is_emergency

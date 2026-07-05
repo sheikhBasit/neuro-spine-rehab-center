@@ -45,9 +45,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   try {
     await requireRole(['admin', 'data_entry'])
     const id = parseInt(params.id)
-    const { name, age, gender, guardian_name, cnic_bform, phone, address, is_emergency, check_in_at,
+    const { name, age, age_unit, gender, guardian_name, cnic_bform, phone, address, is_emergency, check_in_at,
             bp, temperature, pulse, weight, payment_method, bill_amount, discount, amount_paid, payment_status } = await req.json()
 
+    const ageUnit = age_unit === 'months' ? 'months' : 'years'
     const bill  = parseFloat(bill_amount)  || 0
     const disc  = parseFloat(discount)     || 0
     const paid  = parseFloat(amount_paid)  || 0
@@ -60,6 +61,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       UPDATE patients SET
         name           = ${name},
         age            = ${parseInt(age)},
+        age_unit       = ${ageUnit},
         gender         = ${gender || 'male'},
         guardian_name  = ${guardian_name || ''},
         cnic_bform     = ${cnic_bform || ''},

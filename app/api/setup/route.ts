@@ -119,6 +119,8 @@ export async function GET(req: Request) {
     log.push('✓ payment columns on patients')
     await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'male'`
     log.push('✓ gender column on patients')
+    await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS age_unit TEXT NOT NULL DEFAULT 'years'`
+    log.push('✓ age_unit column on patients')
     await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS bp          TEXT DEFAULT ''`
     await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS temperature TEXT DEFAULT ''`
     await sql`ALTER TABLE patients ADD COLUMN IF NOT EXISTS pulse       TEXT DEFAULT ''`
