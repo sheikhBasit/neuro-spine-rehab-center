@@ -41,6 +41,7 @@ export async function middleware(req: NextRequest) {
     if (age > REFRESH_THRESHOLD) {
       const fresh = await new SignJWT({ id: payload.id, role: payload.role, name: payload.name })
         .setProtectedHeader({ alg: 'HS256' })
+        .setIssuedAt()
         .setExpirationTime(SESSION_TTL)
         .sign(secret())
       res.cookies.set(COOKIE, fresh, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_MAX_AGE })
