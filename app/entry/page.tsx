@@ -59,6 +59,7 @@ export default function EntryPanel() {
   const [phoneError, setPhoneError] = useState('')
   const [queueDate, setQueueDate] = useState(new Date().toISOString().slice(0, 10))
   const queueDateRef = useRef(new Date().toISOString().slice(0, 10))
+  const autoTodayRef = useRef(true) // false once the user manually picks a past/future date
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -107,7 +108,14 @@ export default function EntryPanel() {
     if (cached) setPatients(JSON.parse(cached))
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => d && setUser(d))
     loadQueue()
-    const id = setInterval(() => loadQueue(), 3000)
+    const id = setInterval(() => {
+      const now = new Date().toISOString().slice(0, 10)
+      if (autoTodayRef.current && now !== queueDateRef.current) {
+        queueDateRef.current = now
+        setQueueDate(now)
+      }
+      loadQueue()
+    }, 3000)
     return () => clearInterval(id)
   }, [loadQueue])
 
@@ -168,6 +176,7 @@ export default function EntryPanel() {
   // When the date changes, sync form.check_in_at so new registrations land on that date
   const changeDate = (date: string) => {
     queueDateRef.current = date
+    autoTodayRef.current = date === todayISO
     setQueueDate(date)
     if (date === todayISO) {
       setForm(f => ({ ...f, check_in_at: '' }))
